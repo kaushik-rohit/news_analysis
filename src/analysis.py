@@ -16,7 +16,7 @@ parser.add_argument('-s', '--start-date', type=str, default='1-1-2014')
 parser.add_argument('-e', '--end-date', type=str, default='31-1-2014')
 parser.add_argument('-v', '--vectorizer', type=str, default='None')
 parser.add_argument('-a', '--aggregate', type=str, default='date')
-parser.add_argument('-t', '--similarity-threshold', type=int, default=0.3)
+parser.add_argument('-t', '--similarity-threshold', type=float, default=0.3)
 
 
 def build_vectorizer(df):
@@ -64,7 +64,7 @@ def get_similar_articles(articles1, articles2, vec, threshold=0.3):
         #cosine similarity of ith article from articles1 to articles in articles2
         #whose source is not same as source of ith article
         cosine_similarities = cosine_similarities[idx]
-
+        
         #check that there is atleast one element such that similarity of ith article
         #is more than 0.3, if so ith article is in cluster with atleast one article
         #from articles2
@@ -106,7 +106,7 @@ def get_articles_not_in_cluster(articles, vec, threshold=0.3):
     return articles.iloc[indices_of_unclustered_articles]
 
 
-def aggregate_by_date(articles, vec, start_date, end_date):
+def aggregate_by_date(articles, vec, start_date, end_date, threshold=0.3):
     """
     articles: DataFrame with news articles
     vec: The vectorizer trained on articles
@@ -127,8 +127,8 @@ def aggregate_by_date(articles, vec, start_date, end_date):
 
         assert(not articles_for_today.empty and not articles_for_next_day.empty)
 
-        articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec)
-        articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec)
+        articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec, threshold=threshold)
+        articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec, threshold=threshold)
 
         assert(articles_unclustered is not None and articles_in_next_day_cluster is not None)
 
@@ -155,7 +155,7 @@ def aggregate_by_date(articles, vec, start_date, end_date):
     return pd.DataFrame(stats, columns=['source', 'total_articles', 'articles_not_in_cluster', 'articles_in_next_day_cluster', 'percent_of_articles_not_in_cluster', 'percent_of_articles_in_next_day_cluster'])
 
 
-def aggregate_by_source(articles, vec, start_date, end_date):
+def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
     delta = timedelta(days=1)
 
     #get a set of sources
@@ -170,35 +170,56 @@ def aggregate_by_source(articles, vec, start_date, end_date):
 
     for source in sources:
         articles_from_source = articles[articles['Source'] == source]
-        articels_from_other_source  = articles[articles['Source'] != source]
         curr_date = start_date
 
         #stats for given source for each
         #the results are aggregated over day and added to variable stats
-        day_stats = []
+        days_stats = []
 
         while curr_date < end_date:
+            #print('source: {}, date: {}'.format(source, curr_date))
             next_date = curr_date + delta
             articles_for_today = articles_from_source[articles_from_source['Date'] == curr_date]
             articles_for_next_day = articles[articles['Date'] == next_date]
 
             assert(articles_for_today is not None and articles_for_next_day is not None)
+            
+            if articles_for_today.empty or articles_for_next_day.empty:
+                curr_date += delta
+                continue
 
             #articles for curr date with news source as source and not in any cluster
-            articles_unclusterd = get_articles_not_in_cluster(articles_for_today, vec)
-            articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec)
-
-            day_stats += [
-                    len(articles_for_today),
-                    len(articles_unclustered),
-                    len(articles_in_next_day_cluster),
-                    round(len(articles_unclustered) / len(articles_for_today),2),
-                    round(len(articles_in_cluster_next_day) / len(articles_unclustered), 2)
+            articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec, threshold=threshold)
+            articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec, threshold=threshold)
+            
+            articles_len = len(articles_for_today)
+            unclustered_articles_len = len(articles_unclustered)
+            next_day_cluster_len = len(articles_in_next_day_cluster)
+            percent_unclustered = round(unclustered_articles_len / articles_len,2)
+            percent_in_next_day = round(next_day_cluster_len / unclustered_articles_len, 2) if unclustered_articles_len != 0 else 0
+            day_stat = [
+                    articles_len,
+                    unclustered_articles_len,
+                    next_day_cluster_len,
+                    percent_unclustered,
+                    percent_in_next_day
                 ]
-        day_stats = np.array(day_stats)
+            days_stats += [day_stat]
+            curr_date += delta
+        
+        if len(days_stats) == 0:
+            continue
 
+        days_stats = np.array(days_stats)
         avg_stats = [source] #1st column must be source name
-        avg_stats += day_stats.mean(axis=0) #take mean against column
+        
+        mean_stats = list(days_stats.mean(axis=0))
+        mean_stats[0] = int(mean_stats[0])
+        mean_stats[1] = int(mean_stats[1])
+        mean_stats[2] = int(mean_stats[2])
+        mean_stats[3] = round(mean_stats[3],2)
+        mean_stats[4] = round(mean_stats[4],2)
+        avg_stats += mean_stats #take mean against column
 
         stats += [avg_stats]
 
@@ -215,6 +236,7 @@ def aggregate_by_source(articles, vec, start_date, end_date):
 def main():
     args = parser.parse_args()
     data = load_data(args.db_path)
+    print(args.similarity_threshold)
     vectorizer = None
     if args.vectorizer == 'None':
         vectorizer = build_vectorizer(data)
@@ -223,9 +245,15 @@ def main():
             vectorizer = pickle.load(f)
 
     if args.aggregate == 'date':
-        aggregate_by_date(data, vectorizer, date(2014,1,1), date(2014,1,31))
-    else:
-        aggregate_by_source(data, vectorizer, date(2014,1,1), date(2014,1,31))
+        res = aggregate_by_date(data, vectorizer, date(2014,1,1), date(2014,1,31), threshold=args.similarity_threshold)
+        res_csv = res.to_csv(index=False)
+        with open('agg_by_date_t={}.csv'.format(args.similarity_threshold), 'w') as f:
+            f.write(res_csv)
+    elif args.aggregate == 'source':
+        res = aggregate_by_source(data, vectorizer, date(2014,1,1), date(2014,1,31), threshold=args.similarity_threshold)
+        res_csv = res.to_csv(index=False)
+        with open('agg_by_source_t={}.csv'.format(args.similarity_threshold), 'w') as f:
+            f.write(res_csv)
 
 
 if __name__ == '__main__':
