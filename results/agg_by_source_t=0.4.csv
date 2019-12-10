@@ -1,0 +1,32 @@
+source,total_articles,articles_not_in_cluster,articles_in_next_day_cluster,percent_of_articles_not_in_cluster,percent_of_articles_in_next_day_cluster
+Belfast Telegraph Online,226,152,42,0.68,0.29
+Scotsman,78,56,19,0.73,0.33
+dailyrecord.co.uk,115,88,20,0.77,0.25
+Wales on Sunday,135,125,21,0.93,0.17
+walesonline.co.uk,80,53,13,0.67,0.29
+DAILY MAIL (London),123,113,19,0.92,0.18
+MAIL ON SUNDAY (London),131,120,36,0.92,0.3
+Sunday Express,230,185,33,0.8,0.18
+The Sunday Telegraph (London),352,275,53,0.78,0.2
+Sunday Sun,175,161,12,0.92,0.07
+The Guardian - Final Edition,160,142,20,0.88,0.15
+Guardian.com.,95,85,32,0.91,0.42
+The Guardian,213,196,25,0.92,0.13
+mirror.co.uk,290,195,88,0.68,0.45
+Guardian Weekly,81,79,3,0.97,0.05
+The Herald (Glasgow),145,135,14,0.93,0.11
+Express Online,206,138,43,0.67,0.31
+The Observer (London),449,124,15,0.39,0.11
+Daily Star Sunday,228,201,30,0.88,0.15
+The People,332,226,42,0.68,0.19
+The Express,132,112,13,0.85,0.12
+Daily Record and Sunday Mail,208,188,15,0.91,0.08
+telegraph.co.uk,414,228,91,0.56,0.42
+Daily Mirror,365,249,20,0.69,0.08
+Scotland On Sunday,6,5,1,0.91,0.35
+The Daily Telegraph (London),333,242,31,0.72,0.13
+MailOnline,997,364,87,0.38,0.24
+Belfast Telegraph,139,125,12,0.9,0.1
+dailypost.co.uk,33,22,3,0.68,0.19
+Daily Star Online,153,107,33,0.71,0.31
+standard.co.uk,232,101,32,0.43,0.38
