@@ -8,6 +8,7 @@ import numpy as np
 import pickle
 import os
 from utils import *
+from algos import *
 
 #create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -30,11 +31,19 @@ def build_vectorizer(df):
 
 def get_similar_articles(articles1, articles2, vec, threshold=0.3):
     """
-    @df1: (DataFrame) corpus of news articles
-    @df2: (DataFrame) corpus of news articles
-    @vec: TfIdf Vectorizer, trained on a corpus that is superset of df1 & df2
+    The method returns all the articles from articles1 which have atleast one
+    article from articles2 where the cosine similarity is more than threshold.
 
-    returns: list of articles from articles1 that are similar to articles from 
+    Parameters
+    ----------
+    @articles1: (DataFrame) corpus of news articles
+    @articles2: (DataFrame) corpus of news articles
+    @vec: TfIdf Vectorizer, trained on a corpus that is superset of articles1 &
+          articles2
+
+    Returns
+    -------
+    list of articles from articles1 that are similar to articles from
              articles2 and have different news source
 
     """
@@ -44,9 +53,9 @@ def get_similar_articles(articles1, articles2, vec, threshold=0.3):
 
     similar_articles = []
     tfidf = vec.transform(articles2['Transcript'].values)
-    
+
     articles2 = articles2.reset_index()
-    
+
     for i in range(articles1_len):
         row = articles1.iloc[i]
         t1 = row['Transcript']
@@ -64,7 +73,7 @@ def get_similar_articles(articles1, articles2, vec, threshold=0.3):
         #cosine similarity of ith article from articles1 to articles in articles2
         #whose source is not same as source of ith article
         cosine_similarities = cosine_similarities[idx]
-        
+
         #check that there is atleast one element such that similarity of ith article
         #is more than 0.3, if so ith article is in cluster with atleast one article
         #from articles2
@@ -75,17 +84,28 @@ def get_similar_articles(articles1, articles2, vec, threshold=0.3):
 
 
 def get_articles_not_in_cluster(articles, vec, threshold=0.3):
-    """
+    """This method returns all the article from the dataframe input such that
+    there is no other article in articles with which it has cosine similarity
+    greater than threshold.
+    While comparing we use np.count_nonzero(cosine_similarities > threshold)<=1
+    since there will always be an article x(itself) such that cosine_similarity
+    of x with x is greater than threshold.
+
+    Parameters
+    ----------
     @articles:  pandas dataframe containing rows as articles
     @vec:       trained TfidfVectorizer on articles
     @threshold: articles are considered similar if cosine similarity is 
                 greater than threshold
 
-    returns: dataframe with articles which are not similar or in same cluster
-             with any other article in the corpus
+    Returns
+    -------
+    dataframe with articles which are not similar or in same cluster
+    with any other article in the corpus
     """
 
     assert(isinstance(articles, pd.DataFrame))
+    assert(threshold < 1)
 
     articles_n = len(articles)
     indices_of_unclustered_articles = []
@@ -108,17 +128,23 @@ def get_articles_not_in_cluster(articles, vec, threshold=0.3):
 
 def aggregate_by_date(articles, vec, start_date, end_date, threshold=0.3):
     """
-    articles: DataFrame with news articles
-    vec: The vectorizer trained on articles
-    start_date: start date of the analysis
-    end_date: end date of the analysis
+    Parameters
+    ----------
+    @articles: DataFrame with news articles
+    @vec: The vectorizer trained on articles
+    @start_date: start date of the analysis
+    @end_date: end date of the analysis
+
+    Returns
+    -------
+    A panda Dataframe instance
     """
 
     delta = timedelta(days=1)
     curr_date = start_date
 
     stats = []
-    
+
     while curr_date < end_date:
         next_date = curr_date + delta
 
@@ -183,7 +209,7 @@ def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
             articles_for_next_day = articles[articles['Date'] == next_date]
 
             assert(articles_for_today is not None and articles_for_next_day is not None)
-            
+
             if articles_for_today.empty or articles_for_next_day.empty:
                 curr_date += delta
                 continue
@@ -191,7 +217,7 @@ def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
             #articles for curr date with news source as source and not in any cluster
             articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec, threshold=threshold)
             articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec, threshold=threshold)
-            
+
             articles_len = len(articles_for_today)
             unclustered_articles_len = len(articles_unclustered)
             next_day_cluster_len = len(articles_in_next_day_cluster)
@@ -206,13 +232,13 @@ def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
                 ]
             days_stats += [day_stat]
             curr_date += delta
-        
+
         if len(days_stats) == 0:
             continue
 
         days_stats = np.array(days_stats)
         avg_stats = [source] #1st column must be source name
-        
+
         mean_stats = list(days_stats.mean(axis=0))
         mean_stats[0] = int(mean_stats[0])
         mean_stats[1] = int(mean_stats[1])
@@ -229,7 +255,7 @@ def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
               "articles_in_next_day_cluster={}, "
               "percent_of_articles_not_in_cluster={}, "
               "percent_of_articles_in_next_day_cluster={} ".format(*avg_stats))
-              
+
     return pd.DataFrame(stats, columns=['source', 'total_articles', 'articles_not_in_cluster', 'articles_in_next_day_cluster', 'percent_of_articles_not_in_cluster', 'percent_of_articles_in_next_day_cluster'])
 
 
