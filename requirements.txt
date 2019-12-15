@@ -1,3 +1,5 @@
-sklearn
+dateutil
+scikit-learn
 numpy
 pandas
+gensim
