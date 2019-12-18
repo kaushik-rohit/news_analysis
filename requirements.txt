@@ -1,5 +1,6 @@
-dateutil
+python-dateutil
 scikit-learn
 numpy
 pandas
 gensim
+dill

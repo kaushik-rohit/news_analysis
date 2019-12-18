@@ -1,8 +1,7 @@
-from datetime import date
 from gensim.parsing.preprocessing import preprocess_string
 
 
-class Article():
+class Article:
 
     def __init__(self, source, date, program_name, transcript):
         self.source = source
@@ -24,8 +23,8 @@ class Article():
 
     def equals(self, article):
         if (self.source == article.get_source() and
-        self.date == article.get_date() and
-        self.program_name == article.get_program_name):
+                self.date == article.get_date() and
+                self.program_name == article.get_program_name):
             return True
 
         return False

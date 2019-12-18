@@ -6,9 +6,11 @@ import db
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
+
 def save(obj, name):
     with open(name, 'wb') as f:
         pickle.dump(obj, f)
+
 
 def load_data(path):
     newspapers = os.listdir(path)
@@ -21,11 +23,11 @@ def load_data(path):
         df = df.drop(df.columns[0], axis=1)
         df = df.dropna()
 
-        #rename columns so it is consistent across data
+        # rename columns so it is consistent across data
         df.columns = ['Source', 'Date', 'Program Name', 'Transcript']
         df = df[(df['Program Name'] != "") & (df['Transcript'] != '')]
 
-        #parse date
+        # parse date
         df['Date'] = df.apply(lambda row: row['Date'].split('\n')[0], axis=1)
         df['Date'] = df.apply(lambda row: date_parser.parse(row['Date']), axis=1)
 
@@ -34,6 +36,7 @@ def load_data(path):
     df_out = pd.concat(df_daywise, axis=0, ignore_index=True).reset_index()
     df_out.to_pickle('./Jan_2014.pkl')
     return df_out
+
 
 def parse_date(date):
     date = date.split('\n')[0]
@@ -45,9 +48,10 @@ def parse_date(date):
 
     return date_parser.parse(date)
 
+
 def raw_data_to_db(root):
     newspapers_id = os.listdir(root)
-    conn = db.articles_database('./articles.db')
+    conn = db.ArticlesDb('../articles.db')
 
     for newspaper in newspapers_id:
         newspaper_path = os.path.join(root, newspaper)
@@ -59,8 +63,8 @@ def raw_data_to_db(root):
 
             for month in months:
                 month_path = os.path.join(year_path, ' {}-{} {}.csv'.format(month, year, newspaper))
-                print("newspaper: {}, year: {}, month: {}".format(newspaper, year, month))
                 if os.path.exists(month_path):
+                    print(month_path)
                     df = pd.read_csv(month_path)
                     df = df.drop(df.columns[0], axis=1)
                     df = df.dropna()
@@ -71,6 +75,11 @@ def raw_data_to_db(root):
                         continue
 
                     df['Date'] = df.apply(lambda row: parse_date(row['Date']), axis=1)
-                    articles = df.apply(lambda row: (row['Source'], row['Date'].day, row['Date'].month, row['Date'].year, row['Program Name'], row['Transcript']), axis=1).tolist()
+                    df['Source'] = df.apply(lambda row: row['Source'].strip('.\n '), axis=1)
+                    df['Transcript'] = df.apply(lambda row: row['Transcript'].strip(), axis=1)
+
+                    articles = df.apply(lambda row: (
+                        row['Source'], row['Date'].day, row['Date'].month, row['Date'].year, row['Program Name'],
+                        row['Transcript']), axis=1).tolist()
 
                     conn.insert_articles(articles)
