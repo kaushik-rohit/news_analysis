@@ -1,45 +1,97 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import linear_kernel
+from gensim import models
+from gensim import corpora
 from datetime import date, timedelta
-from dateutil import parser as date_parser
+import calendar
+from gensim.test.utils import get_tmpfile
+from gensim.similarities import Similarity, MatrixSimilarity
+import multiprocessing as mp
 import argparse
-import pandas as pd
 import numpy as np
-import pickle
-import os
+import random
+import pandas as pd
+import db
+import dill
 from utils import *
-from algos import *
+from models import *
 
-#create necessary arguments to run the analysis
+# create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--db_path', type=str, default='./news.db')
-parser.add_argument('-s', '--start-date', type=str, default='1-1-2014')
-parser.add_argument('-e', '--end-date', type=str, default='31-1-2014')
-parser.add_argument('-v', '--vectorizer', type=str, default='None')
-parser.add_argument('-a', '--aggregate', type=str, default='date')
-parser.add_argument('-t', '--similarity-threshold', type=float, default=0.3)
+parser.add_argument('-d', '--db-path',
+                    type=str,
+                    required=True,
+                    help='the path to database where news articles are stored')
+
+parser.add_argument('-m', '--month',
+                    choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                    type=int,
+                    default=None,
+                    help='The month for which analysis is to be performed. If month is not provided '
+                         'the analysis is performed on the whole year')
+
+parser.add_argument('-y', '--year',
+                    type=int,
+                    default=2014)
+
+parser.add_argument('-dict', '--dictionary',
+                    type=str,
+                    required=True,
+                    help='')
+
+parser.add_argument('-tf', '--tfidf-model',
+                    type=str,
+                    required=True,
+                    help='')
+
+parser.add_argument('-t', '--threshold',
+                    type=float,
+                    default=0.3,
+                    help='')
 
 
-def build_vectorizer(df):
-    dflen = len(df)
-    corpus = df['Transcript'].values
-    vectorizer = TfidfVectorizer(stop_words='english')
-    vectorizer = vectorizer.fit(corpus)
-    save(vectorizer, 'vec.pkl')
+def get_pos_of_same_source_news(corpus1, corpus2):
+    """
+    The method calculates for each doc in corpus1, a list of indexes at which doc
+    in corpus2 have same news source.
 
-    return vectorizer
+    Parameters
+    ----------
+    @corpus1: (DataFrame) corpus of news articles
+    @corpus2: (DataFrame) corpus of news articles
 
-def get_similar_articles(articles1, articles2, vec, threshold=0.3):
+    Returns
+    -------
+    a list of list containing indexes of corpus2, ith list contains indexes for
+    doc[i] in corpus1 at which docs in corpus2 have same news source
+
+    """
+    corpus1_len = len(corpus1)
+    corpus2_len = len(corpus2)
+    same_source_indices = []
+
+    for i in range(corpus1_len):
+        same_source_index_for_doci = []
+        for j in range(corpus2_len):
+            if corpus1[i].get_source() == corpus2[j].get_source():
+                same_source_index_for_doci += [j]
+        same_source_indices += [same_source_index_for_doci]
+
+    return np.array(same_source_indices)
+
+
+def get_similar_articles(unclustered_articles, articles_day2, dct, tfidf_model, threshold=0.3, diff_source=True):
     """
     The method returns all the articles from articles1 which have atleast one
     article from articles2 where the cosine similarity is more than threshold.
 
     Parameters
     ----------
-    @articles1: (DataFrame) corpus of news articles
-    @articles2: (DataFrame) corpus of news articles
-    @vec: TfIdf Vectorizer, trained on a corpus that is superset of articles1 &
-          articles2
+    @unclusterd_articles: list of Articles, which are not in any cluster
+    @articles_day2: list of Articles, from next day
+    @dct: A gensim Dictionary object, the bag of words model for corpus
+    @tfidf_model: gensim tfidf model
+    @threshold: int, threshold for similarity
+    @diff_source: boolean, whether cluster from next day should be from same source
+                  or different
 
     Returns
     -------
@@ -47,45 +99,44 @@ def get_similar_articles(articles1, articles2, vec, threshold=0.3):
              articles2 and have different news source
 
     """
-
-    articles1_len = len(articles1)
-    articles2_len = len(articles2)
-
+    # index_tmpfile = get_tmpfile("index_new_{}".format(random.randint(1, 10000)))
     similar_articles = []
-    tfidf = vec.transform(articles2['Transcript'].values)
+    # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, articles_day2))], num_features=len(dct))
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles_day2)))], num_features=len(dct))
+    unclustered_articles_vec = tfidf_model[iter(BoWIter(dct, unclustered_articles))]
 
-    articles2 = articles2.reset_index()
+    # if we only want diff source articles cluster, we need to calculate at what indices
+    # same source news occurs so that it similarities at these indices can be masked
+    if diff_source:
+        indices_of_same_source = get_pos_of_same_source_news(unclustered_articles, articles_day2)
 
-    for i in range(articles1_len):
-        row = articles1.iloc[i]
-        t1 = row['Transcript']
-        source = row['Source']
+    idx = 0
+    for similarities in index[unclustered_articles_vec]:
+        # check that there is atleast one element such that similarity of ith article
+        # is more than 0.3, if so ith article is in cluster with atleast one article
+        # from articles2
+        similarities = np.array(similarities)
 
-        #indices of articles(2) where source is different than ith article in articles1
-        idx = articles2.index[articles2['Source'] != row['Source']]
+        # mask all the similarities where articles have some source
+        # since we only want to know unclustered articles forming cluster
+        # from next day articles but different source
+        if diff_source and len(indices_of_same_source[idx]) != 0:
+            indices_of_same_source_i = indices_of_same_source[idx]
+            assert (len(similarities >= len(indices_of_same_source_i)))
+            assert (len(similarities) > max(indices_of_same_source_i))
+            similarities[indices_of_same_source_i] = 0
 
-        #cosine similarity of ith article from articles1 to all articles in articles2
-        cosine_similarities = linear_kernel(vec.transform([t1]), tfidf).flatten()
+        if np.count_nonzero(similarities > threshold) > 0:
+            similar_articles += [idx]
 
-        assert(len(cosine_similarities) == len(articles2))
-        assert(max(idx) < len(cosine_similarities))
-
-        #cosine similarity of ith article from articles1 to articles in articles2
-        #whose source is not same as source of ith article
-        cosine_similarities = cosine_similarities[idx]
-
-        #check that there is atleast one element such that similarity of ith article
-        #is more than 0.3, if so ith article is in cluster with atleast one article
-        #from articles2
-        if np.count_nonzero(cosine_similarities > threshold) > 0:
-            similar_articles.append(row)
+        idx += 1
 
     return similar_articles
 
 
-def get_articles_not_in_cluster(articles, vec, threshold=0.3):
-    """This method returns all the article from the dataframe input such that
-    there is no other article in articles with which it has cosine similarity
+def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
+    """This method returns all the article from the corpus input such that
+    there is no other article in corpus with which it has cosine similarity
     greater than threshold.
     While comparing we use np.count_nonzero(cosine_similarities > threshold)<=1
     since there will always be an article x(itself) such that cosine_similarity
@@ -93,193 +144,227 @@ def get_articles_not_in_cluster(articles, vec, threshold=0.3):
 
     Parameters
     ----------
-    @articles:  pandas dataframe containing rows as articles
-    @vec:       trained TfidfVectorizer on articles
-    @threshold: articles are considered similar if cosine similarity is 
-                greater than threshold
+    @corpus: list of Articles
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
 
     Returns
     -------
-    dataframe with articles which are not similar or in same cluster
-    with any other article in the corpus
+    a list of indexes at which articles in corpus do not form cluster with any
+    other article
     """
+    assert (1 > threshold > 0)
 
-    assert(isinstance(articles, pd.DataFrame))
-    assert(threshold < 1)
+    indices = []
 
-    articles_n = len(articles)
-    indices_of_unclustered_articles = []
-    corpus = articles['Transcript'].values
-    tfidf = vec.transform(corpus) #transfor transcript corpus to vector
+    # index_tmpfile = get_tmpfile("index")
+    # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, corpus))], num_features=len(dct))
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
 
-    for i in range(articles_n):
-        article = articles.iloc[i]
+    idx = 0
+    for similarities in index:
+        if np.count_nonzero(np.array(similarities) > threshold) <= 1:
+            indices += [idx]
+        idx += 1
 
-        #find cosine similarites of article i, to every other article
-        cosine_similarities = linear_kernel(tfidf[i], tfidf).flatten()
-
-        #check if article i, has cosine similarity greater than threshold
-        #for none of the articles other than itself, cosine_sim(x,x) = 1 > threshold
-        if np.count_nonzero(cosine_similarities > threshold) <= 1:
-            indices_of_unclustered_articles.append(i)
-
-    return articles.iloc[indices_of_unclustered_articles]
+    return indices
 
 
-def aggregate_by_date(articles, vec, start_date, end_date, threshold=0.3):
-    """
+def aggregate_by_year(path, dct, tfidf_model, year, threshold=0.3):
+    """if source is None, aggregate by year aggregates the result of all the articles over the month,
+    where if the source is not None, it aggregates the result of articles from source over month
     Parameters
     ----------
-    @articles: DataFrame with news articles
-    @vec: The vectorizer trained on articles
-    @start_date: start date of the analysis
-    @end_date: end date of the analysis
+    @path: string, location to sqlite database
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
+    @year: int, year of the month for which analysis is to be done
+    @threshold (optional): float, similarity threshold
 
     Returns
     -------
     A panda Dataframe instance
     """
-
-    delta = timedelta(days=1)
-    curr_date = start_date
-
+    assert (1 > threshold > 0)
     stats = []
 
-    while curr_date < end_date:
-        next_date = curr_date + delta
+    for month in range(1, 12 + 1):
+        stats += [aggregate_by_month(path, dct, tfidf_model, year, month, avg=True, threshold=threshold)]
 
-        articles_for_today = articles[articles['Date'] == curr_date]
-        articles_for_next_day = articles[articles['Date'] == next_date]
+    stats = pd.concat(stats)
+    stats_by_source = stats.drop(columns=['month']).groupby(['source']).mean().astype(int)  # group by source
+    stats_by_month = stats.drop(columns=['source']).groupby(['month']).sum()  # group by date
 
-        assert(not articles_for_today.empty and not articles_for_next_day.empty)
+    # add percentages to stats
+    stats_by_source['percent_of_unclustered_articles'] = (stats_by_source['unclustered_articles'] /
+                                                          stats_by_source['total_articles']).fillna(0).round(2)
+    stats_by_source['percent_of_articles_in_next_day_cluster'] = (
+            stats_by_source['unclustered_articles_in_next_day_cluster'] /
+            stats_by_source['unclustered_articles']).fillna(0).round(2)
 
-        articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec, threshold=threshold)
-        articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec, threshold=threshold)
+    stats_by_month['percent_of_unclustered_articles'] = (stats_by_month['unclustered_articles'] /
+                                                         stats_by_month['total_articles']).fillna(0).round(2)
+    stats_by_month['percent_of_articles_in_next_day_cluster'] = (
+            stats_by_month['unclustered_articles_in_next_day_cluster'] /
+            stats_by_month['unclustered_articles']).fillna(0).round(2)
 
-        assert(articles_unclustered is not None and articles_in_next_day_cluster is not None)
-
-        day_stat = [
-             curr_date,
-             len(articles_for_today),
-             len(articles_unclustered),
-             len(articles_in_next_day_cluster),
-             round(len(articles_unclustered) / len(articles_for_today),2),
-             round(len(articles_in_next_day_cluster) / len(articles_unclustered), 2)
-        ]
-
-        stats += [day_stat]
-
-        print("date={}, "
-              "total_articles={}, "
-              "articles_not_in_cluster={}, "
-              "articles_in_next_day_cluster={}, "
-              "percent_of_articles_not_in_cluster={}, "
-              "percent_of_articles_in_next_day_cluster={} ".format(*day_stat))
-
-        curr_date += delta
-
-    return pd.DataFrame(stats, columns=['source', 'total_articles', 'articles_not_in_cluster', 'articles_in_next_day_cluster', 'percent_of_articles_not_in_cluster', 'percent_of_articles_in_next_day_cluster'])
+    return stats_by_source, stats_by_month
 
 
-def aggregate_by_source(articles, vec, start_date, end_date, threshold=0.3):
+def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold=0.3):
+    """
+    Parameters
+    ----------
+    @path: string, location to sqlite database
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
+    @year: int, year of the month for which analysis is to be done
+    @month: int
+    @threshold (optional): float, similarity threshold
+
+    Returns
+    -------
+    A panda Dataframe instance
+    """
+    assert (1 > threshold > 0)
     delta = timedelta(days=1)
+    month_name = {1: 'jan', 2: 'feb', 3: 'mar', 4: 'apr', 5: 'may', 6: 'jun', 7: 'jul', 8: 'aug', 9: 'sep', 10: 'oct',
+                  11: 'nov', 12: 'dec'}
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])
 
-    #get a set of sources
-    sources = articles['Source'].unique()
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    print('Parallelize on {} CPUs'.format(mp.cpu_count()))
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    stats = pool.starmap(get_stats_for_date, [(path, dct, tfidf_model, curr_date, threshold)
+                                              for curr_date in date_range])
+    pool.close()
 
-    #the aggregated results (list of lists)
-    #each list contains stats for unique news source
-    #dimension are going to n*5 where n=number of unique news source
-    #5 is the number of stats per news source
+    stats = pd.concat(stats)
+    # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
+    if avg:
+        stats = stats.drop(columns=['date'])
+        stats['month'] = month_name[month]
+        return stats
 
-    stats = []
+    stats_by_source = stats.drop(columns=['date']).groupby(['source']).mean().astype(int)  # group by source
+    stats_by_date = stats.drop(columns=['source']).groupby(['date']).sum()  # group by date
 
-    for source in sources:
-        articles_from_source = articles[articles['Source'] == source]
-        curr_date = start_date
+    # add percentages to stats
+    stats_by_source['percent_of_unclustered_articles'] = (stats_by_source['unclustered_articles'] /
+                                                          stats_by_source['total_articles']).fillna(0).round(2)
+    stats_by_source['percent_of_articles_in_next_day_cluster'] = (
+            stats_by_source['unclustered_articles_in_next_day_cluster'] /
+            stats_by_source['unclustered_articles']).fillna(0).round(2)
 
-        #stats for given source for each
-        #the results are aggregated over day and added to variable stats
-        days_stats = []
+    stats_by_date['percent_of_unclustered_articles'] = (stats_by_date['unclustered_articles'] /
+                                                        stats_by_date['total_articles']).fillna(0).round(2)
+    stats_by_date['percent_of_articles_in_next_day_cluster'] = (
+            stats_by_date['unclustered_articles_in_next_day_cluster'] /
+            stats_by_date['unclustered_articles']).fillna(0).round(2)
 
-        while curr_date < end_date:
-            #print('source: {}, date: {}'.format(source, curr_date))
-            next_date = curr_date + delta
-            articles_for_today = articles_from_source[articles_from_source['Date'] == curr_date]
-            articles_for_next_day = articles[articles['Date'] == next_date]
+    print(stats_by_date)
+    print('-----------------')
+    print(stats_by_source)
+    return stats_by_source, stats_by_date
 
-            assert(articles_for_today is not None and articles_for_next_day is not None)
 
-            if articles_for_today.empty or articles_for_next_day.empty:
-                curr_date += delta
-                continue
+def initialize_results(counts):
+    """
+    Parameters
+    ----------
+    @counts:
 
-            #articles for curr date with news source as source and not in any cluster
-            articles_unclustered = get_articles_not_in_cluster(articles_for_today, vec, threshold=threshold)
-            articles_in_next_day_cluster = get_similar_articles(articles_unclustered, articles_for_next_day, vec, threshold=threshold)
+    Returns
+    -------
+    A Dictionary
+    """
+    # source, year, month, day, total_articles, unclustered_articles, unclustered_articles_in_next_day_cluster
+    results = {}
+    for cnt in counts:
+        results[cnt[0]] = [cnt[1], 0, 0]
+    return results
 
-            articles_len = len(articles_for_today)
-            unclustered_articles_len = len(articles_unclustered)
-            next_day_cluster_len = len(articles_in_next_day_cluster)
-            percent_unclustered = round(unclustered_articles_len / articles_len,2)
-            percent_in_next_day = round(next_day_cluster_len / unclustered_articles_len, 2) if unclustered_articles_len != 0 else 0
-            day_stat = [
-                    articles_len,
-                    unclustered_articles_len,
-                    next_day_cluster_len,
-                    percent_unclustered,
-                    percent_in_next_day
-                ]
-            days_stats += [day_stat]
-            curr_date += delta
 
-        if len(days_stats) == 0:
-            continue
+def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
+    """
+    Parameters
+    ----------
+    @path: string, location to sqlite database
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
+    @curr_date: datetime.date object
+    @threshold (optional): float, similarity threshold
 
-        days_stats = np.array(days_stats)
-        avg_stats = [source] #1st column must be source name
+    Returns
+    -------
+    A panda Dataframe instance
+    """
+    assert (1 > threshold > 0)
+    print('Calculating stats for the day: {}'.format(curr_date))
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    dct = corpora.Dictionary.load(dct_path)
+    tfidf_model = models.TfidfModel.load(model_path)
+    conn = db.ArticlesDb(path)
 
-        mean_stats = list(days_stats.mean(axis=0))
-        mean_stats[0] = int(mean_stats[0])
-        mean_stats[1] = int(mean_stats[1])
-        mean_stats[2] = int(mean_stats[2])
-        mean_stats[3] = round(mean_stats[3],2)
-        mean_stats[4] = round(mean_stats[4],2)
-        avg_stats += mean_stats #take mean against column
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+    count_grouped_by_source = conn.get_count_of_articles_for_date_by_source(curr_date)
+    assert (articles_day1 is not None and articles_day2 is not None)
 
-        stats += [avg_stats]
+    results = initialize_results(count_grouped_by_source)
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i in
+                                            unclustered_articles_indices_in_day2_cluster]
 
-        print("source={}, "
-              "total_articles={}, "
-              "articles_not_in_cluster={}, "
-              "articles_in_next_day_cluster={}, "
-              "percent_of_articles_not_in_cluster={}, "
-              "percent_of_articles_in_next_day_cluster={} ".format(*avg_stats))
+    assert (unclustered_articles is not None and unclustered_articles_in_day2_cluster is not None)
 
-    return pd.DataFrame(stats, columns=['source', 'total_articles', 'articles_not_in_cluster', 'articles_in_next_day_cluster', 'percent_of_articles_not_in_cluster', 'percent_of_articles_in_next_day_cluster'])
+    # update the count of unclustered articles for current date
+    for itr in unclustered_articles:
+        source = itr.get_source()
+        results[source][1] += 1
+
+    # update count of articles that form cluster in next day
+    for it in unclustered_articles_in_day2_cluster:
+        source = it.get_source()
+        results[source][2] += 1
+
+    conn.close()  # close database connection
+
+    # modify dictionary to pandas dataframes, since it is easier to perform group operations
+    df_rows = []
+    for k in results:
+        df_row = [k, curr_date]
+        df_row += results[k]
+        df_rows += [df_row]
+
+    ret = pd.DataFrame(df_rows, columns=['source', 'date', 'total_articles', 'unclustered_articles',
+                                         'unclustered_articles_in_next_day_cluster'])
+    return ret
 
 
 def main():
     args = parser.parse_args()
-    data = load_data(args.db_path)
-    print(args.similarity_threshold)
-    vectorizer = None
-    if args.vectorizer == 'None':
-        vectorizer = build_vectorizer(data)
-    else:
-        with open(args.vectorizer, 'rb') as f:
-            vectorizer = pickle.load(f)
 
-    if args.aggregate == 'date':
-        res = aggregate_by_date(data, vectorizer, date(2014,1,1), date(2014,1,31), threshold=args.similarity_threshold)
-        res_csv = res.to_csv(index=False)
-        with open('agg_by_date_t={}.csv'.format(args.similarity_threshold), 'w') as f:
-            f.write(res_csv)
-    elif args.aggregate == 'source':
-        res = aggregate_by_source(data, vectorizer, date(2014,1,1), date(2014,1,31), threshold=args.similarity_threshold)
-        res_csv = res.to_csv(index=False)
-        with open('agg_by_source_t={}.csv'.format(args.similarity_threshold), 'w') as f:
-            f.write(res_csv)
+    dct = args.dictionary
+    tfidf_model = args.tfidf_model
+    year = args.year
+    month = args.month
+    threshold = args.threshold
+    db_path = args.db_path
+
+    if month is None:
+        df1, df2 = aggregate_by_year(db_path, dct, tfidf_model, year, threshold=threshold)
+        df1.to_csv(path_or_buf='../results/{}_source.csv'.format(year))
+        df2.to_csv(path_or_buf='../results/{}_date.csv'.format(year))
+    else:
+        df1, df2 = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
+        df1.to_csv(path_or_buf='../results/{}_{}_source.csv'.format(year, month))
+        df2.to_csv(path_or_buf='../results/{}_{}_date.csv'.format(year, month))
 
 
 if __name__ == '__main__':

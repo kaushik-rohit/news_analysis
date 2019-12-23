@@ -1,4 +1,8 @@
-from gensim.parsing.preprocessing import preprocess_string
+from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
+from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
+
+CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation,
+                  remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces]
 
 
 class Article:
@@ -33,21 +37,21 @@ class Article:
 class CorpusIter(object):
 
     def __init__(self, docs):
-        self.docs = iter(docs)
+        self.docs = docs
 
     def __iter__(self):
         for doc in self.docs:
-            yield preprocess_string(doc.get_transcript())
+            yield preprocess_string(doc.get_transcript(), CUSTOM_FILTERS)
 
 
 class BoWIter(object):
 
     def __init__(self, dictionary, docs):
         self.dict = dictionary
-        self.docs = iter(docs)
+        self.docs = docs
 
     def __iter__(self):
         for doc in self.docs:
-            bow = self.dict.doc2bow(preprocess_string(doc.get_transcript()))
+            bow = self.dict.doc2bow(preprocess_string(doc.get_transcript(), CUSTOM_FILTERS))
 
             yield bow

@@ -1,9 +1,6 @@
 import argparse
 from gensim import models
 from gensim import corpora
-from dateutil import parser as date_parser
-from sqlite3 import Error
-from gensim.parsing.preprocessing import preprocess_string
 import db
 import os
 from models import BoWIter, CorpusIter
@@ -43,7 +40,7 @@ def train_tfidf(docs, n, out, name):
     # with a large dataset dictionary size can grow huge
     # leading to large tfidf and hence high runtime for transform to bow
     # and calculating similarities
-    dictionary.filter_extremes(no_above=0.99)
+    dictionary.filter_extremes(no_above=0.95)
 
     print('length of dict after filtering is {} ...'.format(len(dictionary)))
     print('creating bag of words for corpus and building tfidf model')
