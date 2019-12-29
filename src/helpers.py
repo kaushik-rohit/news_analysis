@@ -1,8 +1,9 @@
-from dateutil import parser as date_parser
-import pandas as pd
 import os
 import pickle
+import pandas as pd
+from dateutil import parser as date_parser
 import db
+from copy import copy
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
@@ -50,6 +51,15 @@ def parse_date(date):
 
 
 def raw_data_to_db(root):
+    """Inserts raw news articles data from csv files to a sqlite3 database after preprocessing.
+    Parameters
+    ----------
+    @root: (String) path to root directory where news articles are stored in csv
+
+    Returns
+    -------
+    None
+    """
     newspapers_id = os.listdir(root)
     conn = db.ArticlesDb('../articles.db')
 
@@ -83,3 +93,26 @@ def raw_data_to_db(root):
                         row['Transcript']), axis=1).tolist()
 
                     conn.insert_articles(articles)
+                else:
+                    print("{} doesn't exists. Missing data!!".format(month_path))
+
+
+def combine_dct(dct1, dct2):
+    combined_dct = copy(dct1)
+
+    for key, val in dct2.items():
+        if key in combined_dct:
+            combined_dct[key] += val
+        else:
+            combined_dct[key] = val
+
+    return combined_dct
+
+
+def combine_dictionaries(dct):
+    ret = dct[0]
+
+    for i in range(1, len(dct)):
+        ret = combine_dct(ret, dct[i])
+
+    return ret
