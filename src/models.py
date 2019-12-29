@@ -13,22 +13,10 @@ class Article:
         self.program_name = program_name
         self.transcript = transcript
 
-    def get_source(self):
-        return self.source
-
-    def get_date(self):
-        return self.date
-
-    def get_program_name(self):
-        return self.program_name
-
-    def get_transcript(self):
-        return self.transcript
-
     def equals(self, article):
-        if (self.source == article.get_source() and
-                self.date == article.get_date() and
-                self.program_name == article.get_program_name):
+        if (self.source == article.source and
+                self.date == article.date and
+                self.program_name == article.program_name):
             return True
 
         return False
@@ -41,7 +29,7 @@ class CorpusIter(object):
 
     def __iter__(self):
         for doc in self.docs:
-            yield preprocess_string(doc.get_transcript(), CUSTOM_FILTERS)
+            yield preprocess_string(doc.transcript, CUSTOM_FILTERS)
 
 
 class BoWIter(object):
@@ -52,6 +40,6 @@ class BoWIter(object):
 
     def __iter__(self):
         for doc in self.docs:
-            bow = self.dict.doc2bow(preprocess_string(doc.get_transcript(), CUSTOM_FILTERS))
+            bow = self.dict.doc2bow(preprocess_string(doc.transcript, CUSTOM_FILTERS))
 
             yield bow

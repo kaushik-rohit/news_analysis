@@ -2,17 +2,16 @@ from gensim import models
 from gensim import corpora
 from datetime import date, timedelta
 import calendar
-from gensim.test.utils import get_tmpfile
-from gensim.similarities import Similarity, MatrixSimilarity
+from gensim.similarities import MatrixSimilarity
 import multiprocessing as mp
 import argparse
 import numpy as np
+from collections import Counter
 import random
 import pandas as pd
 import db
-import dill
-from utils import *
 from models import *
+from helpers import *
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -29,23 +28,35 @@ parser.add_argument('-m', '--month',
                          'the analysis is performed on the whole year')
 
 parser.add_argument('-y', '--year',
+                    choices=[2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+                             2015, 2016, 2017, 2018],
                     type=int,
-                    default=2014)
+                    default=2014,
+                    help='The year for which analysis is to be performed. By default takes the value 2014')
 
 parser.add_argument('-dict', '--dictionary',
                     type=str,
                     required=True,
-                    help='')
+                    help='the path to bag of words model')
 
 parser.add_argument('-tf', '--tfidf-model',
                     type=str,
                     required=True,
-                    help='')
+                    help='the path to trained tfidf gensim model')
 
 parser.add_argument('-t', '--threshold',
                     type=float,
                     default=0.3,
-                    help='')
+                    help='threshold for cosine similarity to consider news articles in same cluster')
+
+
+class Analysis:
+    def __init__(self, path, dct, tfidf_model, threshold, diff_source=True):
+        self.path = path
+        self.dct = dct
+        self.tfidf_model = tfidf_model
+        self.threshold = threshold
+        self.diff_source = diff_source
 
 
 def get_pos_of_same_source_news(corpus1, corpus2):
@@ -71,17 +82,53 @@ def get_pos_of_same_source_news(corpus1, corpus2):
     for i in range(corpus1_len):
         same_source_index_for_doci = []
         for j in range(corpus2_len):
-            if corpus1[i].get_source() == corpus2[j].get_source():
+            if corpus1[i].source == corpus2[j].source:
                 same_source_index_for_doci += [j]
         same_source_indices += [same_source_index_for_doci]
 
     return np.array(same_source_indices)
 
 
-def get_similar_articles(unclustered_articles, articles_day2, dct, tfidf_model, threshold=0.3, diff_source=True):
+def get_similar_articles_by_source_count(articles1, articles2, index_mapping):
+    """
+    It returns a dictionary with stats for articles and the other news sources that
+    reported this news article.
+    Parameters
+    ----------
+    @articles1: A list of Article objects
+    @articles2: A list of Article objects
+    @index_mapping: A list of tuple, which maps articles from articles_day1 to articles in articles_day2
+    based on the cosine similarity metric
+    Returns
+    -------
+    A dictionary, with keys as sources and value as count dictionary
+    """
+    ret = {}
+
+    for idx, similar_articles_idx in index_mapping:
+        source = articles1[idx].source
+        for index in similar_articles_idx:
+            similar_article_source = articles2[index].source
+            if source not in ret:
+                ret[source] = Counter()
+
+            mapping_for_source = ret[source]
+
+            if similar_article_source not in mapping_for_source:
+                mapping_for_source[similar_article_source] = 1
+            else:
+                mapping_for_source[similar_article_source] += 1
+
+    return ret
+
+
+def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, diff_source=True):
     """
     The method returns all the articles from articles1 which have atleast one
     article from articles2 where the cosine similarity is more than threshold.
+    Moreover, if the parameter return_articles is True, the function also returns
+    the indexes of articles from articles_day2 to which articles in unclustered articles
+    are similar.
 
     Parameters
     ----------
@@ -89,29 +136,30 @@ def get_similar_articles(unclustered_articles, articles_day2, dct, tfidf_model, 
     @articles_day2: list of Articles, from next day
     @dct: A gensim Dictionary object, the bag of words model for corpus
     @tfidf_model: gensim tfidf model
+    @return_articles: boolean, whether indices of articles which article at index i is similar to will
+                      also be returned
     @threshold: int, threshold for similarity
     @diff_source: boolean, whether cluster from next day should be from same source
                   or different
 
     Returns
     -------
-    list of articles from articles1 that are similar to articles from
-             articles2 and have different news source
+    list of tuples, where the first element in the tuple is the index of articles from unclustered articles which have
+    atleast one article from articles_day2 with greater similarity and the second element in the tuple is the index of
+    articles from articles_day with which similarity threshold is greater
 
     """
-    # index_tmpfile = get_tmpfile("index_new_{}".format(random.randint(1, 10000)))
     similar_articles = []
-    # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, articles_day2))], num_features=len(dct))
-    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles_day2)))], num_features=len(dct))
-    unclustered_articles_vec = tfidf_model[iter(BoWIter(dct, unclustered_articles))]
+
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles2)))], num_features=len(dct))
+    articles1_vec = tfidf_model[iter(BoWIter(dct, articles1))]
 
     # if we only want diff source articles cluster, we need to calculate at what indices
     # same source news occurs so that it similarities at these indices can be masked
     if diff_source:
-        indices_of_same_source = get_pos_of_same_source_news(unclustered_articles, articles_day2)
+        indices_of_same_source = get_pos_of_same_source_news(articles1, articles2)
 
-    idx = 0
-    for similarities in index[unclustered_articles_vec]:
+    for idx, similarities in enumerate(index[articles1_vec]):
         # check that there is atleast one element such that similarity of ith article
         # is more than 0.3, if so ith article is in cluster with atleast one article
         # from articles2
@@ -122,14 +170,15 @@ def get_similar_articles(unclustered_articles, articles_day2, dct, tfidf_model, 
         # from next day articles but different source
         if diff_source and len(indices_of_same_source[idx]) != 0:
             indices_of_same_source_i = indices_of_same_source[idx]
-            assert (len(similarities >= len(indices_of_same_source_i)))
+
+            assert (len(similarities) >= len(indices_of_same_source_i))
             assert (len(similarities) > max(indices_of_same_source_i))
+
             similarities[indices_of_same_source_i] = 0
 
-        if np.count_nonzero(similarities > threshold) > 0:
-            similar_articles += [idx]
-
-        idx += 1
+        indices_where_similarity_greater_than_threshold = np.argwhere(similarities > threshold).flatten()
+        if indices_where_similarity_greater_than_threshold.size() > 0:
+            similar_articles += [(idx, list(indices_where_similarity_greater_than_threshold))]
 
     return similar_articles
 
@@ -140,7 +189,7 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
     greater than threshold.
     While comparing we use np.count_nonzero(cosine_similarities > threshold)<=1
     since there will always be an article x(itself) such that cosine_similarity
-    of x with x is greater than threshold.
+    of x with x is greater than threshold. ie cosim (x, x) = 1
 
     Parameters
     ----------
@@ -150,8 +199,7 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
 
     Returns
     -------
-    a list of indexes at which articles in corpus do not form cluster with any
-    other article
+    a list of indexes of articles in corpus which are not similar to any other articles
     """
     assert (1 > threshold > 0)
 
@@ -161,18 +209,16 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
     # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, corpus))], num_features=len(dct))
     index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
 
-    idx = 0
-    for similarities in index:
+    for idx, similarities in enumerate(index):
         if np.count_nonzero(np.array(similarities) > threshold) <= 1:
             indices += [idx]
-        idx += 1
 
     return indices
 
 
 def aggregate_by_year(path, dct, tfidf_model, year, threshold=0.3):
-    """if source is None, aggregate by year aggregates the result of all the articles over the month,
-    where if the source is not None, it aggregates the result of articles from source over month
+    """aggregate result across year by source and month
+
     Parameters
     ----------
     @path: string, location to sqlite database
@@ -239,8 +285,12 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold
     stats = pool.starmap(get_stats_for_date, [(path, dct, tfidf_model, curr_date, threshold)
                                               for curr_date in date_range])
     pool.close()
+    stats = zip(*stats)
 
-    stats = pd.concat(stats)
+    source_counts = stats[1]
+    source_counts = combine_dictionaries(source_counts)
+    stats = pd.concat(stats[0])
+
     # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
     if avg:
         stats = stats.drop(columns=['date'])
@@ -263,10 +313,7 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold
             stats_by_date['unclustered_articles_in_next_day_cluster'] /
             stats_by_date['unclustered_articles']).fillna(0).round(2)
 
-    print(stats_by_date)
-    print('-----------------')
-    print(stats_by_source)
-    return stats_by_source, stats_by_date
+    return stats_by_source, stats_by_date, source_counts
 
 
 def initialize_results(counts):
@@ -311,6 +358,7 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
     count_grouped_by_source = conn.get_count_of_articles_for_date_by_source(curr_date)
+
     assert (articles_day1 is not None and articles_day2 is not None)
 
     results = initialize_results(count_grouped_by_source)
@@ -318,19 +366,21 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
                                                                         tfidf_model, threshold=threshold)
-    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i in
+    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
                                             unclustered_articles_indices_in_day2_cluster]
+    sim_articles_group = get_similar_articles_by_source_count(articles_day1, articles_day2,
+                                                              unclustered_articles_indices_in_day2_cluster)
 
     assert (unclustered_articles is not None and unclustered_articles_in_day2_cluster is not None)
 
     # update the count of unclustered articles for current date
     for itr in unclustered_articles:
-        source = itr.get_source()
+        source = itr.source
         results[source][1] += 1
 
     # update count of articles that form cluster in next day
     for it in unclustered_articles_in_day2_cluster:
-        source = it.get_source()
+        source = it.source
         results[source][2] += 1
 
     conn.close()  # close database connection
@@ -344,7 +394,7 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
 
     ret = pd.DataFrame(df_rows, columns=['source', 'date', 'total_articles', 'unclustered_articles',
                                          'unclustered_articles_in_next_day_cluster'])
-    return ret
+    return ret, sim_articles_group
 
 
 def main():
