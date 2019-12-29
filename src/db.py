@@ -74,21 +74,21 @@ class ArticlesDb:
 
         return iter(ResultIterator(rows))
 
-    def select_articles_by_source_and_date(self, source, date):
+    def select_articles_by_source_and_date(self, source, dt):
         cur = self.conn.cursor()
-        rows = cur.execute(select_articles_by_source_and_date_query, (date.year, date.month, date.day, source))
+        rows = cur.execute(select_articles_by_source_and_date_query, (dt.year, dt.month, dt.day, source))
 
         return iter(ResultIterator(rows))
 
-    def select_articles_by_diff_source_and_date(self, source, date):
+    def select_articles_by_diff_source_and_date(self, source, dt):
         cur = self.conn.cursor()
-        rows = cur.execute(select_articles_by_diff_source_and_date_query, (date.year, date.month, date.day, source))
+        rows = cur.execute(select_articles_by_diff_source_and_date_query, (dt.year, dt.month, dt.day, source))
 
         return iter(ResultIterator(rows))
 
-    def select_articles_by_date(self, date):
+    def select_articles_by_date(self, dt):
         cur = self.conn.cursor()
-        rows = cur.execute(select_articles_by_date_query, (date.year, date.month, date.day))
+        rows = cur.execute(select_articles_by_date_query, (dt.year, dt.month, dt.day))
 
         return iter(ResultIterator(rows))
 
@@ -107,15 +107,15 @@ class ArticlesDb:
 
         return cur.fetchone()[0]
 
-    def get_count_of_articles_for_date(self, date):
+    def get_count_of_articles_for_date(self, dt):
         cur = self.conn.cursor()
-        cur.execute(get_count_by_date_query, (date.year, date.month, date.day))
+        cur.execute(get_count_by_date_query, (dt.year, dt.month, dt.day))
 
         return cur.fetchone()[0]
 
-    def get_count_of_articles_for_date_by_source(self, date):
+    def get_count_of_articles_for_date_by_source(self, dt):
         cur = self.conn.cursor()
-        cur.execute(get_count_by_date_and_source_query, (date.year, date.month, date.day))
+        cur.execute(get_count_by_date_and_source_query, (dt.year, dt.month, dt.day))
 
         return cur.fetchall()
 
