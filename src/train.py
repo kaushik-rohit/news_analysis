@@ -1,6 +1,7 @@
 import argparse
 from gensim import models
 from gensim import corpora
+from gensim.models.phrases import Phrases, Phraser
 import db
 import os
 from models import BoWIter, CorpusIter
@@ -20,20 +21,29 @@ parser.add_argument('-o', '--output-path',
 parser.add_argument('-m', '--month',
                     choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                     type=int,
-                    default=None)
+                    default=None,
+                    help='The month of data sources on which model is to be trained.'
+                         'If month is not passed, model is trained on entire year.')
 
 parser.add_argument('-y', '--year',
                     type=int,
-                    default=2014)
+                    default=2014,
+                    help='The year of data sources on which model is to be trained')
+
+parser.add_argument('-a', '--algo',
+                    choices=['tfidf', 'bigram'],
+                    type=str,
+                    default='tfidf',
+                    help='the algorithm to train news data on')
 
 
 def train_tfidf(docs, out, name):
     """
     Parameters
     ----------
-    @docs: A list of strings, corpus on which TfIDF model will be trained
-    @out: directory path where bag of words and tfidf model will be saved
-    @name: suffix to be added to the models name, i.e if 2014 is passed as
+    @docs: (list) A list of strings, corpus on which TfIDF model will be trained
+    @out: (string) directory path where bag of words and tfidf model will be saved
+    @name: (string) suffix to be added to the models name, i.e if 2014 is passed as
         name arg, the saved models will be named tfidf_2014 and vocab_2014.dict
 
     Returns
@@ -64,6 +74,27 @@ def train_tfidf(docs, out, name):
     dictionary.save(os.path.join(out, 'vocab_{}.dict'.format(name)))
     # corpora.MmCorpus.serialize(os.path.join(out, 'bow_corpus_{}.mm'.format(name)), iter(BoWIter(dictionary, docs)))
     tfidf.save(os.path.join(out, 'tfidf_{}'.format(name)))
+
+
+def train_bigram(docs, out, name):
+    """
+    Parameters
+    ----------
+    @corpus: (list) a list of strings or sentences on which bigram model will be trained
+    @out: (string) path of output directory where trained bigram model will be saved
+    @name: (string) name of output bigram file
+
+    Returns
+    -------
+    None
+    """
+    sentences = CorpusIter(docs)
+    print('generating bigram phrases from the corpus...')
+    phrases = Phrases(sentences, min_count=1, threshold=1)
+    print('building the bigram model')
+    bigram = Phraser(phrases)
+    print('saving bigram model...')
+    bigram.save(os.path.join(out, 'bigram_{}'.format(name)))
 
 
 def main():
