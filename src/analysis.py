@@ -1,13 +1,11 @@
-from gensim import models
-from gensim import corpora
 from datetime import date, timedelta
-import calendar
+from gensim import models, corpora
 from gensim.similarities import MatrixSimilarity
 import multiprocessing as mp
 import argparse
 import numpy as np
+import calendar
 from collections import Counter
-import random
 import pandas as pd
 import db
 from models import *
@@ -177,7 +175,7 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
             similarities[indices_of_same_source_i] = 0
 
         indices_where_similarity_greater_than_threshold = np.argwhere(similarities > threshold).flatten()
-        if indices_where_similarity_greater_than_threshold.size() > 0:
+        if indices_where_similarity_greater_than_threshold.size > 0:
             similar_articles += [(idx, list(indices_where_similarity_greater_than_threshold))]
 
     return similar_articles
@@ -285,8 +283,7 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold
     stats = pool.starmap(get_stats_for_date, [(path, dct, tfidf_model, curr_date, threshold)
                                               for curr_date in date_range])
     pool.close()
-    stats = zip(*stats)
-
+    stats = list(zip(*stats))
     source_counts = stats[1]
     source_counts = combine_dictionaries(source_counts)
     stats = pd.concat(stats[0])
@@ -368,7 +365,7 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
                                                                         tfidf_model, threshold=threshold)
     unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
                                             unclustered_articles_indices_in_day2_cluster]
-    sim_articles_group = get_similar_articles_by_source_count(articles_day1, articles_day2,
+    sim_articles_group = get_similar_articles_by_source_count(unclustered_articles, articles_day2,
                                                               unclustered_articles_indices_in_day2_cluster)
 
     assert (unclustered_articles is not None and unclustered_articles_in_day2_cluster is not None)
@@ -412,9 +409,10 @@ def main():
         df1.to_csv(path_or_buf='../results/{}_source.csv'.format(year))
         df2.to_csv(path_or_buf='../results/{}_date.csv'.format(year))
     else:
-        df1, df2 = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
+        df1, df2, source_stat = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
         df1.to_csv(path_or_buf='../results/{}_{}_source.csv'.format(year, month))
         df2.to_csv(path_or_buf='../results/{}_{}_date.csv'.format(year, month))
+        save(source_stat, 'source_stat_{}_{}'.format(year, month))
 
 
 if __name__ == '__main__':
