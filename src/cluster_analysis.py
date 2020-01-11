@@ -214,6 +214,27 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
     return indices
 
 
+def _add_percentages_to_result(stats):
+    """
+    The function takes in a pandas dataframe that contains cluster statistics and adds columns with
+    percent_of_unclustered_articles and percent_of_articles_in_next_day_cluster in the result.
+
+    Parameters
+    ----------
+    @stats: pandas DataFrame, containing the cluster statistics
+
+    Returns
+    -------
+    Pandas DataFrame with added columns to represent percentages in statistics
+    """
+
+    stats['percent_of_unclustered_articles'] = (stats['unclustered_articles'] /
+                                                stats['total_articles']).fillna(0).round(2)
+    stats['percent_of_articles_in_next_day_cluster'] = (
+            stats['unclustered_articles_in_next_day_cluster'] /
+            stats['unclustered_articles']).fillna(0).round(2)
+
+
 def aggregate_by_year(path, dct, tfidf_model, year, threshold=0.3):
     """aggregate result across year by source and month
 
@@ -240,22 +261,13 @@ def aggregate_by_year(path, dct, tfidf_model, year, threshold=0.3):
     stats_by_month = stats.drop(columns=['source']).groupby(['month']).sum()  # group by date
 
     # add percentages to stats
-    stats_by_source['percent_of_unclustered_articles'] = (stats_by_source['unclustered_articles'] /
-                                                          stats_by_source['total_articles']).fillna(0).round(2)
-    stats_by_source['percent_of_articles_in_next_day_cluster'] = (
-            stats_by_source['unclustered_articles_in_next_day_cluster'] /
-            stats_by_source['unclustered_articles']).fillna(0).round(2)
-
-    stats_by_month['percent_of_unclustered_articles'] = (stats_by_month['unclustered_articles'] /
-                                                         stats_by_month['total_articles']).fillna(0).round(2)
-    stats_by_month['percent_of_articles_in_next_day_cluster'] = (
-            stats_by_month['unclustered_articles_in_next_day_cluster'] /
-            stats_by_month['unclustered_articles']).fillna(0).round(2)
+    _add_percentages_to_result(stats_by_month)
+    _add_percentages_to_result(stats_by_source)
 
     return stats_by_source, stats_by_month
 
 
-def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold=0.3):
+def aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=False, threshold=0.3):
     """
     Parameters
     ----------
@@ -289,7 +301,7 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold
     stats = pd.concat(stats[0])
 
     # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
-    if avg:
+    if agg_later:
         stats = stats.drop(columns=['date'])
         stats['month'] = month_name[month]
         return stats
@@ -298,17 +310,8 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, avg=False, threshold
     stats_by_date = stats.drop(columns=['source']).groupby(['date']).sum()  # group by date
 
     # add percentages to stats
-    stats_by_source['percent_of_unclustered_articles'] = (stats_by_source['unclustered_articles'] /
-                                                          stats_by_source['total_articles']).fillna(0).round(2)
-    stats_by_source['percent_of_articles_in_next_day_cluster'] = (
-            stats_by_source['unclustered_articles_in_next_day_cluster'] /
-            stats_by_source['unclustered_articles']).fillna(0).round(2)
-
-    stats_by_date['percent_of_unclustered_articles'] = (stats_by_date['unclustered_articles'] /
-                                                        stats_by_date['total_articles']).fillna(0).round(2)
-    stats_by_date['percent_of_articles_in_next_day_cluster'] = (
-            stats_by_date['unclustered_articles_in_next_day_cluster'] /
-            stats_by_date['unclustered_articles']).fillna(0).round(2)
+    _add_percentages_to_result(stats_by_date)
+    _add_percentages_to_result(stats_by_source)
 
     return stats_by_source, stats_by_date, source_counts
 
