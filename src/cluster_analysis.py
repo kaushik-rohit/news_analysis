@@ -254,7 +254,7 @@ def aggregate_by_year(path, dct, tfidf_model, year, threshold=0.3):
     stats = []
 
     for month in range(1, 12 + 1):
-        stats += [aggregate_by_month(path, dct, tfidf_model, year, month, avg=True, threshold=threshold)]
+        stats += [aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=True, threshold=threshold)]
 
     stats = pd.concat(stats)
     stats_by_source = stats.drop(columns=['month']).groupby(['source']).mean().astype(int)  # group by source
