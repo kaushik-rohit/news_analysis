@@ -1,4 +1,9 @@
 import argparse
+from datetime import date, timedelta
+from cluster_analysis import get_articles_not_in_cluster
+from helpers import *
+import calendar
+import multiprocessing as mp
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -36,21 +41,39 @@ parser.add_argument('-t', '--threshold',
                     default=0.3,
                     help='threshold for cosine similarity to consider news articles in same cluster')
 
+top_1000_bigrams = []
 
-def bias_averaged_over_month():
+
+def bias_averaged_over_month(db_path, dct, tfidf_model, month, year):
+    delta = timedelta(days=1)
+    month_name = {1: 'jan', 2: 'feb', 3: 'mar', 4: 'apr', 5: 'may', 6: 'jun', 7: 'jul', 8: 'aug', 9: 'sep', 10: 'oct',
+                  11: 'nov', 12: 'dec'}
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])
+
+
+def bias_averaged_over_year(db_path, dct, tfidf_model, year, threshold=0.3):
     pass
 
 
-def bias_averaged_over_year():
-    pass
-
-
-def calculate_bias(bigrams_freq):
+def calculate_bias(db_path, dct, tfidf_model, date, threshold):
     pass
 
 
 def main():
-    pass
+    args = parser.parse_args()
+
+    dct = args.dictionary
+    tfidf_model = args.tfidf_model
+    year = args.year
+    month = args.month
+    threshold = args.threshold
+    db_path = args.db_path
+
+    if month is None:
+        bias_averaged_over_year(db_path, dct, tfidf_model, year, threshold=threshold)
+    else:
+        bias_averaged_over_year(db_path, dct, tfidf_model, year, threshold=threshold)
 
 
 if __name__ == '__main__':
