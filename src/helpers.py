@@ -1,6 +1,7 @@
 import os
 import pickle
 import pandas as pd
+import json
 from dateutil import parser as date_parser
 import db
 from copy import copy
@@ -11,6 +12,11 @@ months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 
 def save(obj, name):
     with open(name, 'wb') as f:
         pickle.dump(obj, f)
+
+
+def save_json(obj, name):
+    with open(name, 'wb') as f:
+        json.dump(obj, f)
 
 
 def load_data(path):
@@ -98,6 +104,17 @@ def raw_data_to_db(root):
 
 
 def combine_dct(dct1, dct2):
+    """
+    Parameters
+    ----------
+    @dct1: dictionary object
+    @dct2: dictionary object
+
+    Returns
+    -------
+    a dictionary with key from dct1 and dct2 and values from common keys are summed
+    """
+
     combined_dct = copy(dct1)
 
     for key, val in dct2.items():
@@ -110,6 +127,16 @@ def combine_dct(dct1, dct2):
 
 
 def combine_dictionaries(dct):
+    """
+    Parameters
+    ----------
+    @dct: a list of dictionaries
+
+    Returns
+    -------
+    a single dictionary with common key elements summed
+    """
+
     ret = dct[0]
 
     for i in range(1, len(dct)):
