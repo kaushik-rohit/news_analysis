@@ -76,31 +76,11 @@ def train_tfidf(docs, out, name):
     tfidf.save(os.path.join(out, 'tfidf_{}'.format(name)))
 
 
-def train_bigram(docs, out, name):
-    """
-    Parameters
-    ----------
-    @corpus: (list) a list of strings or sentences on which bigram model will be trained
-    @out: (string) path of output directory where trained bigram model will be saved
-    @name: (string) name of output bigram file
-
-    Returns
-    -------
-    None
-    """
-    sentences = CorpusIter(docs)
-    print('generating bigram phrases from the corpus...')
-    phrases = Phrases(sentences, min_count=1, threshold=1)
-    print('building the bigram model')
-    bigram = Phraser(phrases)
-    print('saving bigram model...')
-    bigram.save(os.path.join(out, 'bigram_{}'.format(name)))
-
-
 def main():
     args = parser.parse_args()
 
     conn = db.ArticlesDb(args.db_path)
+
     if args.month is None:
         n = conn.get_count_of_articles_for_year(args.year)
         corpus = list(conn.select_articles_by_year(args.year))
