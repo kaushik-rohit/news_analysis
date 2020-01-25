@@ -23,6 +23,8 @@ select_articles_by_year_query = "select * from articles where year=?"
 
 select_articles_by_month_query = "select * from articles where year=? and month=?"
 
+select_articles_by_source_and_month_query = "select * from articles where year=? and month=? and source=?"
+
 select_articles_by_date_query = "select * from articles where year=? and month=? and day=?"
 
 select_articles_by_source_and_date_query = "select * from articles where year=? and month=? and day=? and source=?"
@@ -37,6 +39,8 @@ get_count_by_month_and_year_query = "select count(*) from articles where year=? 
 get_count_by_date_query = "select count(*) from articles where year=? and month=? and day=?"
 
 get_all_distinct_source_query = "select distinct(source) from articles;"
+
+get_distinct_source_for_month_query = "select distinct(source) from articles where year=? and month=?"
 
 get_count_by_date_and_source_query = ("select source, count(*) as total_articles from articles "
                                       "where year=? and month=? and day=? group by source")
@@ -71,6 +75,12 @@ class ArticlesDb:
     def select_articles_by_year_and_month(self, year, month):
         cur = self.conn.cursor()
         rows = cur.execute(select_articles_by_month_query, (year, month,))
+
+        return iter(ResultIterator(rows))
+
+    def select_articles_by_source_and_month(self, year, month, source):
+        cur = self.conn.cursor()
+        rows = cur.execute(select_articles_by_source_and_month_query, (year, month, source))
 
         return iter(ResultIterator(rows))
 
@@ -122,6 +132,12 @@ class ArticlesDb:
     def get_all_new_source(self):
         cur = self.conn.cursor()
         cur.execute(get_all_distinct_source_query)
+
+        return cur.fetchall()
+
+    def get_news_source_for_month(self, year, month):
+        cur = self.conn.cursor()
+        cur.execute(get_distinct_source_for_month_query, (year, month))
 
         return cur.fetchall()
 
