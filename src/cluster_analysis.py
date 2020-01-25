@@ -9,7 +9,7 @@ from collections import Counter
 import pandas as pd
 import db
 from models import *
-from helpers import *
+import helpers
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -415,7 +415,7 @@ def main():
         df1, df2, source_stat = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
         df1.to_csv(path_or_buf='../results/{}_{}_source.csv'.format(year, month))
         df2.to_csv(path_or_buf='../results/{}_{}_date.csv'.format(year, month))
-        save(source_stat, 'source_stat_{}_{}'.format(year, month))
+        helpers.save(source_stat, 'source_stat_{}_{}'.format(year, month))
 
 
 if __name__ == '__main__':
