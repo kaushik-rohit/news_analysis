@@ -256,6 +256,19 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
 
 
 def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluster, in_tomorrow_cluster):
+    """
+    Parameters
+    ----------
+    @all_articles: (list)
+    @in_cluster: (list)
+    @not_in_cluster: (list)
+    @in_tomorrow_cluster: (list)
+
+    Returns
+    -------
+    a pandas dataframe with bias for different cluster combined
+    """
+
     columns = ['source', 'all_articles', 'in_cluster', 'not_in_cluster', 'in_tomorrows_cluster']
     sources = list(all_articles.keys()) + list(in_cluster.keys()) + list(not_in_cluster.keys()) + \
               list(in_tomorrow_cluster.keys())
@@ -270,6 +283,16 @@ def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluste
 
 
 def aggregate_month_bias_results(results):
+    """
+    Parameters
+    ----------
+    @results: (list) of dictionary tuples with dictionary as monthly bias for each cluster
+
+    Returns
+    -------
+    (a pandas dataframe) with bias averaged over month grouped by news source
+    """
+
     bias_all_articles = {}
     bias_in_cluster = {}
     bias_not_in_cluster = {}
@@ -319,7 +342,6 @@ def aggregate_month_bias_results(results):
 
 def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, agg_later=False, threshold=0.3):
     """
-
     Parameters
     ----------
     @db_path: (string) path to articles database
@@ -332,8 +354,14 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
     Returns
     -------
-
+    if agg_later=False:
+        a pandas dataframe with bias for different clusters grouped by news source
+    else:
+        dictionary objects for different clusters which has source as key and corresponding month bias.
+        This is used when yearly bias for source is to be calculated and hence the results are aggregated at later
+        stage for each of the months in a year.
     """
+
     conn = db.ArticlesDb(db_path)
     news_source = conn.get_news_source_for_month(year, month)
     all_articles = list(conn.select_articles_by_year_and_month(year, month))
@@ -378,20 +406,20 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
 def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, threshold=0.3):
     """
-
     Parameters
     ----------
-    @db_path
-    @dct
-    @tfidf_model
-    @top1000_bigrams
-    @year
-    @threshold
+    @db_path: (string) path to articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: (gensim tfidf object)
+    @top1000_bigrams: (pandas DataFrame)top 1000 bigrams from MP speeches with alpha and beta bias coefficeint
+    @year: (int)
+    @threshold: (float)
 
     Returns
     -------
-
+    a pandas dataframe with bias for different clusters grouped by souce
     """
+
     assert (1 > threshold > 0)
     results = []
 
