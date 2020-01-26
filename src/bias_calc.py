@@ -55,8 +55,6 @@ parser.add_argument('-pb', '--parliament-bigrams',
                     help='the path to top n bigrams from parliament speeches')
 
 top_1000_bigrams = None
-month_name = {1: 'jan', 2: 'feb', 3: 'mar', 4: 'apr', 5: 'may', 6: 'jun',
-              7: 'jul', 8: 'aug', 9: 'sep', 10: 'oct', 11: 'nov', 12: 'dec'}
 porter = PorterStemmer()
 
 
@@ -90,12 +88,17 @@ def get_cluster_for_the_day(path, dct, tfidf_model, curr_date, threshold):
 
 def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     """
+    Calculate different clusters of news articles for a given month and return the list of articles which are in
+    cluster, which are not in cluster with any other article or articles which are not in cluster with any other
+    article from the same day but in cluster with articles from next day.
 
+    The method makes use of parallel processing and the 4 groups or clusters are calculated in parallel for each day and
+    later combined to form lists for entire month.
     Parameters
     ----------
-    @path
-    @dct
-    @tfidf_model
+    @path: (string) path to location of articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: gensim tfidf model
     @year
     @month
     @threshold
@@ -106,7 +109,7 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     """
     assert (1 > threshold > 0)
     start_date = date(year, month, 1)
-    end_date = date(year, month, 3)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])
 
     in_cluster_articles = []
     not_in_cluster_articles = []
@@ -128,6 +131,16 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
 
 
 def get_bigrams_for_single_article(article):
+    """
+    Calculates bigrams present in a news article
+    Parameters
+    ----------
+    @article: Article Object
+
+    Returns
+    -------
+    (source, bigram) source name and list of bigrams in article transcript as a tuple
+    """
     sentences = nltk.sent_tokenize(article.transcript.lower())
     tokenized = map(nltk.tokenize.word_tokenize, sentences)
     tokenized = map(stem_wrapper, tokenized)
@@ -137,27 +150,28 @@ def get_bigrams_for_single_article(article):
     for i in range(len(bigram)):
         bigram[i] = bigram[i][0] + '_' + bigram[i][1]
 
-    bigram = Counter(bigram)
-
     return article.source, bigram
 
 
 def get_bigrams_in_articles(articles):
     """
-
+    Calculates bigrams present in a list of news articles. These bigrams are combined and grouped by news source.
+    It calculates the bigram for articles in parallel and later combine these bigrams to form a dictionary.
+    The method return a dictionary with keys as news source and values as bigrams.
     Parameters
     ----------
-    @articles:
+    @articles: list of news articles
 
     Returns
     -------
-
+    A dictionary with key as source and value as a Counter object containing frequency of bigrams in the articles from
+    these news source
     """
+
     all_bigrams = {}
     bigrams_by_source = []
 
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    print('Parallelize bigram calculation on {} CPUs'.format(mp.cpu_count()))
 
     for _ in tqdm(pool.imap_unordered(get_bigrams_for_single_article, articles), total=len(articles)):
         bigrams_by_source.append(_)
@@ -171,15 +185,29 @@ def get_bigrams_in_articles(articles):
         else:
             all_bigrams[source] = bigrams
 
+    for source, bigrams in all_bigrams.items():
+        all_bigrams[source] = Counter(bigrams)
+
     return all_bigrams
 
 
 def get_freq_of_top1000_bigrams(top1000_bigram, bigrams):
+    """
+    Calculates the frequency of top 1000 bigrams occurring in bigrams grouped by news source
+    Parameters
+    ----------
+    @top1000_bigram: (list) of 1000 bigrams from MP speeches
+    @bigrams: (dictionary) of bigrams with key as source
+
+    Returns
+    -------
+    a pandas DataFrame with count of each top 1000 bigrams in different news source
+    """
     rows = []
 
     assert (len(top1000_bigram) == 1000)
 
-    for source, bigram_freq in bigrams:
+    for source, bigram_freq in tqdm(bigrams.items()):
         top1000_bigram_freq = [0] * 1000
 
         for i in range(1000):
@@ -193,16 +221,28 @@ def get_freq_of_top1000_bigrams(top1000_bigram, bigrams):
 
 
 def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
+    """
+
+    Parameters
+    ----------
+    @top1000_bigrams_freq_by_source: (dictionary) frequency of top 1000 bigrams grouped by source
+    @top1000bigrams: (DataFrame) with top1000 bigrams and alpha and beta bias coefficients
+
+    Returns
+    -------
+    bias of each source
+    """
+
     bigrams = top1000_bigrams_freq_by_source.columns.tolist()[1:]
 
     assert (len(bigrams) == 1000)
 
     bias_by_source = {}
 
-    for row in top1000_bigrams_freq_by_source.rows:
+    for index, row in tqdm(top1000_bigrams_freq_by_source.iterrows()):
         bias = 0
         num = 0
-        den = sum(top_1000_bigrams['beta'].tolist() ** 2)
+        den = sum((top_1000_bigrams['beta'] ** 2).tolist())
 
         for i in range(1000):
             alpha = top1000bigrams[top1000bigrams['bigram'] == bigrams[i]]['alpha']
@@ -219,13 +259,13 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
     Parameters
     ----------
-    @db_path
-    @dct
-    @tfidf_model
-    @top1000_bigram
-    @month
-    @year
-    @threshold
+    @db_path: (string) path to articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: (gensim tfidf object)
+    @top1000_bigram: top 1000 bigrams in MP speeches with alpha and beta bias coefficient
+    @month: (int)
+    @year: (int)
+    @threshold: (float)
 
     Returns
     -------
@@ -235,26 +275,31 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     news_source = conn.get_news_source_for_month(year, month)
     all_articles = list(conn.select_articles_by_year_and_month(year, month))
     n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
+    top_bigrams = top1000_bigram['bigram'].tolist()
     in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
                                                                               year, month, threshold)
 
+    print('calculating bigrams for in cluster articles')
     bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
+    print('calculating bigrams for not in cluster articles')
     bigrams_not_in_cluster = get_bigrams_in_articles(not_in_cluster)
+    print('calculating bigrams for in tomorrow cluster articles')
     bigrams_in_cluster_tomorrow = get_bigrams_in_articles(in_cluster_tomorrow)
+    print('calculating bigrams for all articles')
     bigrams_all_articles = get_bigrams_in_articles(all_articles)
 
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    print('Parallelize bigram calculation on {} CPUs'.format(mp.cpu_count()))
+    print('calculating frequency of top MPs bigrams in news articles')
     (top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster, top_bigrams_freq_not_in_cluster,
      top_bigrams_freq_in_cluster_tomorrow) = pool.starmap(get_freq_of_top1000_bigrams,
-                                                          [(top1000_bigram, bigrams_all_articles),
-                                                           (top1000_bigram, bigrams_in_cluster),
-                                                           (top1000_bigram, bigrams_not_in_cluster),
-                                                           (top1000_bigram, bigrams_in_cluster_tomorrow)])
+                                                          [(top_bigrams, bigrams_all_articles),
+                                                           (top_bigrams, bigrams_in_cluster),
+                                                           (top_bigrams, bigrams_not_in_cluster),
+                                                           (top_bigrams, bigrams_in_cluster_tomorrow)])
     pool.close()
 
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    print('Parallelize bias calculation on {} CPUs'.format(mp.cpu_count()))
+    print('calculating bias of news source by cluster groups')
     bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = pool.starmap(
         calculate_bias, [(top_bigrams_freq_all_articles, top1000_bigram), (top_bigrams_freq_in_cluster, top1000_bigram),
                          (top_bigrams_freq_not_in_cluster, top1000_bigram),
