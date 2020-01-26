@@ -11,6 +11,7 @@ import helpers
 import multiprocessing as mp
 from collections import Counter
 from tqdm import tqdm
+import numpy as np
 import db
 
 # create necessary arguments to run the analysis
@@ -254,7 +255,69 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
     return bias_by_source
 
 
-def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, threshold):
+def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluster, in_tomorrow_cluster):
+    columns = ['source', 'all_articles', 'in_cluster', 'not_in_cluster', 'in_tomorrows_cluster']
+    sources = list(all_articles.keys()) + list(in_cluster.keys()) + list(not_in_cluster.keys()) + \
+              list(in_tomorrow_cluster.keys())
+
+    sources = list(set(sources))
+    rows = []
+    for source in sources:
+        rows += [[source, all_articles[source], in_cluster[source],
+                  not_in_cluster[source], in_tomorrow_cluster[source]]]
+
+    return pd.DataFrame(rows, columns=columns)
+
+
+def aggregate_month_bias_results(results):
+    bias_all_articles = {}
+    bias_in_cluster = {}
+    bias_not_in_cluster = {}
+    bias_in_cluster_tomorrow = {}
+
+    for result in results:
+        all_articles, in_cluster, not_in_cluster, in_cluster_tomorrow = (result[0], result[1], result[2], result[3])
+
+        for source, bias in all_articles.items():
+            if source not in bias_all_articles:
+                bias_all_articles[source] = [bias]
+            else:
+                bias_all_articles[source] += [bias]
+
+        for source, bias in in_cluster.items():
+            if source not in bias_in_cluster:
+                bias_in_cluster[source] = [bias]
+            else:
+                bias_in_cluster[source] += [bias]
+
+        for source, bias in not_in_cluster.items():
+            if source not in bias_not_in_cluster:
+                bias_not_in_cluster[source] = [bias]
+            else:
+                bias_not_in_cluster[source] += [bias]
+
+        for source, bias in in_cluster_tomorrow.items():
+            if source not in bias_in_cluster_tomorrow:
+                bias_in_cluster_tomorrow[source] = [bias]
+            else:
+                bias_in_cluster_tomorrow[source] += [bias]
+
+        sources = list(bias_all_articles.keys()) + list(bias_in_cluster.keys()) + list(bias_not_in_cluster.keys()) + \
+                  list(bias_in_cluster_tomorrow.keys())
+
+        sources = list(set(sources))
+
+        for source in source:
+            bias_all_articles[source] = np.mean(bias_all_articles[source])
+            bias_in_cluster[source] = np.mean(bias_in_cluster[source])
+            bias_not_in_cluster[source] = np.mean(bias_not_in_cluster[source])
+            bias_in_cluster_tomorrow[source] = np.mean(bias_in_cluster_tomorrow[source])
+
+    return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
+                                                bias_in_cluster_tomorrow)
+
+
+def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, agg_later=False, threshold=0.3):
     """
 
     Parameters
@@ -306,7 +369,11 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
                          (top_bigrams_freq_in_cluster_tomorrow, top1000_bigram)])
     pool.close()
 
-    return bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow
+    if agg_later:
+        return bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow
+
+    return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
+                                                bias_in_cluster_tomorrow)
 
 
 def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, threshold=0.3):
@@ -329,16 +396,14 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, th
     results = []
 
     for month in range(1, 12 + 1):
-        results += [bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigrams, year, month,
+        results += [bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigrams, year, month, agg_later=True,
                                              threshold=threshold)]
-    bias_all_articles = {}
-    bias_in_cluster = {}
-    bias_not_in_cluster = {}
-    bias_in_cluster_tomorrow = {}
 
-    # aggregate the monthly results
+    assert (len(results) == 12)
 
-    return bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow
+    bias = aggregate_month_bias_results(results)
+
+    return bias
 
 
 def main():
@@ -358,15 +423,11 @@ def main():
     top_1000_bigrams = pd.read_csv(top1000_bigrams_path)
 
     if month is None:
-        bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = bias_averaged_over_year(
-            db_path, dct, tfidf_model, top_1000_bigrams, year, threshold=threshold)
+        result = bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, threshold=threshold)
+        result.to_csv(path_or_buf='../results/bias_{}.csv'.format(year))
     else:
-        bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = bias_averaged_over_month(
-            db_path, dct, tfidf_model, top_1000_bigrams, year, month, threshold=threshold)
-        helpers.save_json(bias_all_articles, 'bias_all_articles.json')
-        helpers.save_json(bias_in_cluster, 'bias_in_cluster.json')
-        helpers.save_json(bias_not_in_cluster, 'bias_not_in_cluster.json')
-        helpers.save_json(bias_in_cluster_tomorrow, 'bias_in_cluster_tomorrow.json')
+        result = bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, threshold=threshold)
+        result.to_csv(path_or_buf='../results/bias_{}_{}.csv'.format(year, month))
 
 
 if __name__ == '__main__':
