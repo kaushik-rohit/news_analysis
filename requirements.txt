@@ -1,3 +1,5 @@
+tqdm
+nltk
 python-dateutil
 scikit-learn
 numpy
