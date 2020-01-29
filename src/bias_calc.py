@@ -219,7 +219,7 @@ def get_bigrams_in_articles(articles):
 def standardize_bigrams_count(top_bigrams_share_by_source):
     """
     Calculate Z-Score for shares of 1000 bigrams from MP Speeches in articles grouped by source.
-    Update the bigram share and standarize it.
+    Update the bigram share and standardize it.
     Parameters
     ----------
     top_bigrams_share_by_source: (pandas DataFrame) with row as share of top bigrams in each source and columns as
@@ -265,7 +265,7 @@ def get_freq_of_top1000_bigrams(top1000_bigram, bigrams):
 
     columns = ['source'] + top1000_bigram
 
-    return pd.DataFrame(rows, columns=columns)
+    return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index()
 
 
 def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
@@ -336,7 +336,7 @@ def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluste
 
         rows += [[source, bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_tomorrow_cluster]]
 
-    return pd.DataFrame(rows, columns=columns)
+    return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index()
 
 
 def aggregate_month_bias_results(results):
@@ -431,7 +431,7 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
                                                                               year, month, threshold)
 
-    # assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
+    assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
 
     print('calculating bigrams for in cluster articles')
     bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
@@ -500,7 +500,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, th
     @db_path: (string) path to articles database
     @dct: (gensim dictionary object)
     @tfidf_model: (gensim tfidf object)
-    @top1000_bigrams: (pandas DataFrame)top 1000 bigrams from MP speeches with alpha and beta bias coefficeint
+    @top1000_bigrams: (pandas DataFrame)top 1000 bigrams from MP speeches with alpha and beta bias coefficient
     @year: (int)
     @threshold: (float)
 
