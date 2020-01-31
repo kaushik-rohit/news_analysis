@@ -81,7 +81,7 @@ def preprocess(sent):
     """
     stop_words = set(stopwords.words('english'))
     return list(filter(lambda token: token not in string.punctuation and token not in stop_words and
-                (len(token) > 1), sent))
+                                     (len(token) > 1), sent))
 
 
 def get_cluster_for_the_day(path, dct, tfidf_model, curr_date, threshold):
@@ -204,16 +204,48 @@ def get_bigrams_in_articles(articles):
         else:
             all_bigrams[source] = bigrams
 
+    return all_bigrams
+
+
+def _convert_bigrams_to_shares(all_bigrams):
+    total_count_by_source = {}
+
     for source, bigrams in all_bigrams.items():
         bigrams_freq = Counter(bigrams)
         total = sum(bigrams_freq.values(), 0.0)
+        total_count_by_source[source] = total
 
         for bigram in bigrams_freq:
             bigrams_freq[bigram] /= total
 
         all_bigrams[source] = bigrams_freq
 
-    return all_bigrams
+    return total_count_by_source
+
+
+def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold=0.3):
+    conn = db.ArticlesDb(db_path)
+    news_source = conn.get_news_source_for_month(year, month)
+    all_articles = list(conn.select_articles_by_year_and_month(year, month))
+    n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
+
+    assert (n_articles == len(all_articles))
+
+    in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
+                                                                              year, month, threshold)
+
+    assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
+
+    print('calculating bigrams for in cluster articles')
+    bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
+    print('calculating bigrams for not in cluster articles')
+    bigrams_not_in_cluster = get_bigrams_in_articles(not_in_cluster)
+    print('calculating bigrams for in tomorrow cluster articles')
+    bigrams_in_cluster_tomorrow = get_bigrams_in_articles(in_cluster_tomorrow)
+    print('calculating bigrams for all articles')
+    bigrams_all_articles = get_bigrams_in_articles(all_articles)
+
+    return bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles
 
 
 def standardize_bigrams_count(top_bigrams_share_by_source):
@@ -238,10 +270,12 @@ def standardize_bigrams_count(top_bigrams_share_by_source):
         mean = top_bigrams_share_by_source[bigram].mean()
         top_bigrams_share_by_source[bigram] = (top_bigrams_share_by_source[bigram] - mean) / std
 
+    return top_bigrams_share_by_source.fillna(0)  # if z score is nan change it 0
 
-def get_freq_of_top1000_bigrams(top1000_bigram, bigrams):
+
+def get_shares_of_top1000_bigrams(top1000_bigram, bigrams):
     """
-    Calculates the frequency of top 1000 bigrams occurring in bigrams grouped by news source
+    Calculates the shares of top 1000 bigrams occurring in bigrams grouped by news source
     Parameters
     ----------
     @top1000_bigram: (list) of 1000 bigrams from MP speeches
@@ -294,12 +328,14 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
         for i in range(1000):
             alpha = top1000bigrams[top1000bigrams['bigram'] == bigrams[i]].iloc[0]['alpha']
             beta = top1000bigrams[top1000bigrams['bigram'] == bigrams[i]].iloc[0]['beta']
+            bigram_share = row[bigrams[i]]
+
             assert (isinstance(alpha, float))
             assert (isinstance(beta, float))
+            assert (isinstance(bigram_share, float))
+
             # print('alpha: {}, beta: {}'.format(alpha, beta))
-            if np.isnan(row[bigrams[i]]):
-                continue
-            num += beta * (row[bigrams[i]] - alpha)
+            num += beta * (bigram_share - alpha)
             den += beta * beta
         # print('numerator: {}, denominator: {}'.format(num, den))
         bias = num / den
@@ -339,65 +375,7 @@ def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluste
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def aggregate_month_bias_results(results):
-    """
-    Parameters
-    ----------
-    @results: (list) of dictionary tuples with dictionary as monthly bias for each cluster
-
-    Returns
-    -------
-    (a pandas dataframe) with bias averaged over month grouped by news source
-    """
-
-    bias_all_articles = {}
-    bias_in_cluster = {}
-    bias_not_in_cluster = {}
-    bias_in_cluster_tomorrow = {}
-
-    for result in results:
-        all_articles, in_cluster, not_in_cluster, in_cluster_tomorrow = (result[0], result[1], result[2], result[3])
-
-        for source, bias in all_articles.items():
-            if source not in bias_all_articles:
-                bias_all_articles[source] = [bias]
-            else:
-                bias_all_articles[source] += [bias]
-
-        for source, bias in in_cluster.items():
-            if source not in bias_in_cluster:
-                bias_in_cluster[source] = [bias]
-            else:
-                bias_in_cluster[source] += [bias]
-
-        for source, bias in not_in_cluster.items():
-            if source not in bias_not_in_cluster:
-                bias_not_in_cluster[source] = [bias]
-            else:
-                bias_not_in_cluster[source] += [bias]
-
-        for source, bias in in_cluster_tomorrow.items():
-            if source not in bias_in_cluster_tomorrow:
-                bias_in_cluster_tomorrow[source] = [bias]
-            else:
-                bias_in_cluster_tomorrow[source] += [bias]
-
-        sources = list(bias_all_articles.keys()) + list(bias_in_cluster.keys()) + list(bias_not_in_cluster.keys()) + \
-                  list(bias_in_cluster_tomorrow.keys())
-
-        sources = list(set(sources))
-
-        for source in sources:
-            bias_all_articles[source] = np.mean(bias_all_articles[source])
-            bias_in_cluster[source] = np.mean(bias_in_cluster[source])
-            bias_not_in_cluster[source] = np.mean(bias_not_in_cluster[source])
-            bias_in_cluster_tomorrow[source] = np.mean(bias_in_cluster_tomorrow[source])
-
-    return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
-                                                bias_in_cluster_tomorrow)
-
-
-def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, agg_later=False, threshold=0.3):
+def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, threshold=0.3):
     """
     Parameters
     ----------
@@ -420,34 +398,21 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         stage for each of the months in a year.
     """
 
-    conn = db.ArticlesDb(db_path)
-    news_source = conn.get_news_source_for_month(year, month)
-    all_articles = list(conn.select_articles_by_year_and_month(year, month))
-    n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
+    bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
+        get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold)
 
-    assert (n_articles == len(all_articles))
+    print('converting bigrams list to fractional count')
+    _convert_bigrams_to_shares(bigrams_all_articles)
+    _convert_bigrams_to_shares(bigrams_in_cluster)
+    _convert_bigrams_to_shares(bigrams_not_in_cluster)
+    _convert_bigrams_to_shares(bigrams_in_cluster_tomorrow)
 
     top_bigrams = top1000_bigram['bigram'].tolist()
-    in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
-                                                                              year, month, threshold)
-
-    assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
-
-    print('calculating bigrams for in cluster articles')
-    bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
-    print('calculating bigrams for not in cluster articles')
-    bigrams_not_in_cluster = get_bigrams_in_articles(not_in_cluster)
-    print('calculating bigrams for in tomorrow cluster articles')
-    bigrams_in_cluster_tomorrow = get_bigrams_in_articles(in_cluster_tomorrow)
-    print('calculating bigrams for all articles')
-    bigrams_all_articles = get_bigrams_in_articles(all_articles)
-
-    del all_articles, in_cluster, not_in_cluster, in_cluster_tomorrow
 
     pool = mp.Pool(mp.cpu_count())
-    print('calculating frequency of top MPs bigrams in news articles')
+    print('calculating shares of top MPs bigrams in news articles')
     (top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster, top_bigrams_freq_not_in_cluster,
-     top_bigrams_freq_in_cluster_tomorrow) = pool.starmap(get_freq_of_top1000_bigrams,
+     top_bigrams_freq_in_cluster_tomorrow) = pool.starmap(get_shares_of_top1000_bigrams,
                                                           [(top_bigrams, bigrams_all_articles),
                                                            (top_bigrams, bigrams_in_cluster),
                                                            (top_bigrams, bigrams_not_in_cluster),
@@ -466,13 +431,13 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     del bigrams_in_cluster, bigrams_in_cluster_tomorrow, bigrams_not_in_cluster, bigrams_all_articles
 
     print('standardizing bigram count for all articles')
-    standardize_bigrams_count(top_bigrams_freq_all_articles)
+    top_bigrams_freq_all_articles = standardize_bigrams_count(top_bigrams_freq_all_articles)
     print('standardizing bigram count in cluster')
-    standardize_bigrams_count(top_bigrams_freq_in_cluster)
+    top_bigrams_freq_in_cluster = standardize_bigrams_count(top_bigrams_freq_in_cluster)
     print('standardizing bigram count not_in cluster')
-    standardize_bigrams_count(top_bigrams_freq_not_in_cluster)
+    top_bigrams_freq_not_in_cluster = standardize_bigrams_count(top_bigrams_freq_not_in_cluster)
     print('standardizing bigram count for in cluster tomorrow')
-    standardize_bigrams_count(top_bigrams_freq_in_cluster_tomorrow)
+    top_bigrams_freq_in_cluster_tomorrow = standardize_bigrams_count(top_bigrams_freq_in_cluster_tomorrow)
 
     top_bigrams_freq_all_articles.to_csv(path_or_buf='../results/top_bigrams_freq_all_articles_std_{}_{}.csv'.format(
         year, month))
@@ -494,14 +459,59 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
     print(bias_all_articles)
 
-    if agg_later:
-        return bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow
-
     return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
                                                 bias_in_cluster_tomorrow)
 
 
-def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, threshold=0.3):
+def aggregate_bigrams_month_count(total_bigrams_for_month):
+    total_bigrams_count = {}
+    assert (len(total_bigrams_for_month) == 12)
+    source_across_month = set()
+
+    for i in range(1, 12 + 1):
+        source_across_month.update(list(total_bigrams_for_month[i].keys()))
+
+    source_across_month = list(source_across_month)
+
+    for source in source_across_month:
+        total_bigrams_count[source] = 0
+
+    for i in range(1, 12 + 1):
+        if source in total_bigrams_for_month[i]:
+            total_bigrams_count[source] += total_bigrams_for_month[i][source]
+
+    return total_bigrams_count
+
+
+def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, aggregate_source_count, top_bigrams):
+    # assert (len(top_bigrams_month_share) == 12)
+    # assert (len(total_bigrams_month) == 12)
+    # assert (len(top_bigrams) == 1000)
+
+    sources = list(aggregate_source_count.keys())
+
+    rows = []
+    columns = ['source'] + top_bigrams
+
+    for source in sources:
+        weighted_shares = [0] * 1000
+        for i in range(1, 2 + 1):
+            top_bigrams_shares_for_month = top_bigrams_month_share[i]
+            total_bigrams_for_month = total_bigrams_month[i]
+
+            if source not in top_bigrams_month_share['source']:
+                continue
+
+            weighted_shares += top_bigrams_shares_for_month[top_bigrams_shares_for_month['source'] ==
+                                                            source].iloc[0].tolist()[1:]*total_bigrams_for_month[source]
+        weighted_shares = weighted_shares / aggregate_source_count[source]
+
+        rows += [source] + weighted_shares
+
+    return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
+
+
+def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, threshold=0.3):
     """
     Parameters
     ----------
@@ -514,21 +524,103 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigrams, year, th
 
     Returns
     -------
-    a pandas dataframe with bias for different clusters grouped by souce
+    a pandas dataframe with bias for different clusters grouped by source
     """
 
     assert (1 > threshold > 0)
-    results = []
+    top_bigrams_share_by_month_in_cluster = []
+    total_bigrams_by_month_in_cluster = []
+    top_bigrams_share_by_month_not_in_cluster = []
+    total_bigrams_by_month_not_in_cluster = []
+    top_bigrams_share_by_month_in_cluster_tomorrow = []
+    total_bigrams_by_month_in_cluster_tomorrow = []
+    top_bigrams_share_by_month_all_articles = []
+    total_bigrams_by_month_all_articles = []
 
-    for month in range(1, 12 + 1):
-        results += [bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigrams, year, month, agg_later=True,
-                                             threshold=threshold)]
+    top_bigrams = top1000_bigram['bigram'].tolist()
 
-    assert (len(results) == 12)
+    # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
+    for month in range(1, 2 + 1):
+        bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
+            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold)
 
-    bias = aggregate_month_bias_results(results)
+        total_bigrams_all_articles = _convert_bigrams_to_shares(bigrams_all_articles)
+        total_bigrams_in_cluster = _convert_bigrams_to_shares(bigrams_in_cluster)
+        total_bigrams_not_in_cluster = _convert_bigrams_to_shares(bigrams_not_in_cluster)
+        total_bigrams_in_cluster_tomorrow = _convert_bigrams_to_shares(bigrams_in_cluster_tomorrow)
 
-    return bias
+        pool = mp.Pool(mp.cpu_count())
+        print('calculating shares of top MPs bigrams in news articles')
+        (top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster, top_bigrams_freq_not_in_cluster,
+         top_bigrams_freq_in_cluster_tomorrow) = pool.starmap(get_shares_of_top1000_bigrams,
+                                                              [(top_bigrams, bigrams_all_articles),
+                                                               (top_bigrams, bigrams_in_cluster),
+                                                               (top_bigrams, bigrams_not_in_cluster),
+                                                               (top_bigrams, bigrams_in_cluster_tomorrow)])
+        pool.close()
+
+        top_bigrams_share_by_month_in_cluster.append(top_bigrams_freq_in_cluster)
+        total_bigrams_by_month_in_cluster.append(total_bigrams_in_cluster)
+
+        top_bigrams_share_by_month_not_in_cluster.append(top_bigrams_freq_not_in_cluster)
+        total_bigrams_by_month_not_in_cluster.append(total_bigrams_not_in_cluster)
+
+        top_bigrams_share_by_month_in_cluster_tomorrow.append(top_bigrams_freq_in_cluster_tomorrow)
+        total_bigrams_by_month_in_cluster_tomorrow.append(total_bigrams_in_cluster_tomorrow)
+
+        top_bigrams_share_by_month_all_articles.append(top_bigrams_freq_all_articles)
+        total_bigrams_by_month_all_articles.append(total_bigrams_all_articles)
+
+    # get aggregate bigram count across month, i.e count of bigrams in an year grouped by month
+    aggregate_source_count_in_cluster = aggregate_bigrams_month_count(total_bigrams_by_month_in_cluster)
+    aggregate_source_count_not_in_cluster = aggregate_bigrams_month_count(total_bigrams_by_month_not_in_cluster)
+    aggregate_source_count_in_cluster_tomorrow = aggregate_bigrams_month_count(
+        total_bigrams_by_month_in_cluster_tomorrow)
+    aggregate_source_count_all_articles = aggregate_bigrams_month_count(total_bigrams_by_month_all_articles)
+
+    # get share of top bigrams for a year by aggregating the share for each month
+    aggregate_share_in_cluster = aggregate_bigrams_month_share(top_bigrams_share_by_month_in_cluster,
+                                                               total_bigrams_by_month_in_cluster,
+                                                               aggregate_source_count_in_cluster,
+                                                               top_bigrams)
+
+    print('aggregate share in cluster')
+    print(aggregate_share_in_cluster)
+    aggregate_share_not_in_cluster = aggregate_bigrams_month_share(top_bigrams_share_by_month_not_in_cluster,
+                                                                   total_bigrams_by_month_not_in_cluster,
+                                                                   aggregate_source_count_not_in_cluster,
+                                                                   top_bigrams)
+
+    aggregate_share_in_cluster_tomorrow = aggregate_bigrams_month_share(top_bigrams_share_by_month_in_cluster_tomorrow,
+                                                                        total_bigrams_by_month_in_cluster_tomorrow,
+                                                                        aggregate_source_count_in_cluster_tomorrow,
+                                                                        top_bigrams)
+
+    aggregate_share_all_articles = aggregate_bigrams_month_share(top_bigrams_share_by_month_all_articles,
+                                                                 total_bigrams_by_month_all_articles,
+                                                                 aggregate_source_count_all_articles,
+                                                                 top_bigrams)
+
+    print('standardizing bigram count for all articles')
+    aggregate_share_in_cluster = standardize_bigrams_count(aggregate_share_in_cluster)
+    print('standardizing bigram count in cluster')
+    aggregate_share_not_in_cluster = standardize_bigrams_count(aggregate_share_not_in_cluster)
+    print('standardizing bigram count not_in cluster')
+    aggregate_share_in_cluster_tomorrow = standardize_bigrams_count(aggregate_share_in_cluster_tomorrow)
+    print('standardizing bigram count for in cluster tomorrow')
+    aggregate_share_all_articles = standardize_bigrams_count(aggregate_share_all_articles)
+
+    pool = mp.Pool(mp.cpu_count())  # calculate bias for clusters in parallel
+    print('calculating bias of news source by cluster groups')
+    bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = pool.starmap(
+        calculate_bias, [(aggregate_share_all_articles, top1000_bigram),
+                         (aggregate_share_in_cluster, top1000_bigram),
+                         (aggregate_share_not_in_cluster, top1000_bigram),
+                         (aggregate_share_in_cluster_tomorrow, top1000_bigram)])
+    pool.close()
+
+    return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
+                                                bias_in_cluster_tomorrow)
 
 
 def main():
