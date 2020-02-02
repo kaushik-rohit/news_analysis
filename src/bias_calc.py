@@ -85,6 +85,23 @@ def preprocess(sent):
 
 
 def get_cluster_for_the_day(path, dct, tfidf_model, curr_date, threshold):
+    """
+    Parameters
+    ----------
+    path: (string) path to articles database
+    dct: (gensim dictionary)
+    tfidf_model: (gensim tfidf model)
+    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
+    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    clustered_articles: the list of articles for curr_date which are in cluster with other articles
+    unclustered_articles: the list of articles for curr_date which are not in cluster with any other article
+    unclustered_articles_in_day2_cluster: list of articles for curr_date which are not in cluster with any other article
+    from same date but are in cluster with articles from next day
+    """
+
     delta = timedelta(days=1)
     next_date = curr_date + delta
     conn = db.ArticlesDb(path)
@@ -117,14 +134,15 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     @path: (string) path to location of articles database
     @dct: (gensim dictionary object)
     @tfidf_model: gensim tfidf model
-    @year
-    @month
-    @threshold
+    @year: (int)
+    @month: (int)
+    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
 
     Returns
     -------
     3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
     """
+
     assert (1 > threshold > 0)
     start_date = date(year, month, 1)
     end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
@@ -159,6 +177,7 @@ def get_bigrams_for_single_article(article):
     -------
     (source, bigram) source name and list of bigrams in article transcript as a tuple
     """
+
     sentences = nltk.sent_tokenize(article.transcript.lower())
     tokenized = map(nltk.tokenize.word_tokenize, sentences)
     tokenized = map(preprocess, tokenized)
@@ -208,6 +227,21 @@ def get_bigrams_in_articles(articles):
 
 
 def _convert_bigrams_to_shares(all_bigrams):
+    """
+    Converts list of bigrams to a dictionary with keys as unique bigram and value as the share of bigram over all the
+    bigrams present for that source.
+
+    Parameters
+    ----------
+    all_bigrams: (dictionary) A python dictionary with key as news source and value as list of all bigrams present
+    in the news of the news source
+
+    Returns
+    -------
+    total_count_by_source (dictionary): with count of all the bigrams for every source i.e key is source and value is
+    the count of bigrams in that source
+    """
+
     total_count_by_source = {}
 
     for source, bigrams in all_bigrams.items():
@@ -224,6 +258,25 @@ def _convert_bigrams_to_shares(all_bigrams):
 
 
 def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold=0.3):
+    """
+    A wrapper function to return the bigrams present in the news articles for the given year and month for different
+    clusters.
+    Parameters
+    ----------
+    db_path: (string) path to the articles database
+    dct: (gensim dictionary object)
+    tfidf_model: (gensim tfidf model)
+    year: (int)
+    month: (int)
+    threshold: (float) the threshold for cosine similarity which is used to determine if two articles are in same
+    cluster or not.
+
+    Returns
+    -------
+    bigrams_in_cluster: (dictionary) key as source and value as all the bigrams present in the news for the particular
+                        source and articles which are in cluster for given month and year
+    bigrams_not_in_cluster: (dictionary)
+    """
     conn = db.ArticlesDb(db_path)
     news_source = conn.get_news_source_for_month(year, month)
     all_articles = list(conn.select_articles_by_year_and_month(year, month))
@@ -234,7 +287,7 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
                                                                               year, month, threshold)
 
-    # assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
+    assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
 
     print('calculating bigrams for in cluster articles')
     bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
@@ -464,6 +517,19 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
 
 def aggregate_bigrams_month_count(total_bigrams_for_month):
+    """
+
+    Parameters
+    ----------
+    total_bigrams_for_month: (list of dictionaries) each dictionary in the list corresponds to a month and stores keys
+                             as the source and value as the count of bigrams for the source in particular month.
+
+    Returns
+    -------
+    total_bigrams_count: (dictionary) with key as source and values as total count of bigrams for the source
+                         across all month
+    """
+
     total_bigrams_count = {}
     assert (len(total_bigrams_for_month) == 12)
     source_across_month = set()
@@ -484,6 +550,20 @@ def aggregate_bigrams_month_count(total_bigrams_for_month):
 
 
 def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, aggregate_source_count, top_bigrams):
+    """
+
+    Parameters
+    ----------
+    top_bigrams_month_share: (list)
+    total_bigrams_month: (list)
+    aggregate_source_count: (dictionary)
+    top_bigrams: (list)
+
+    Returns
+    -------
+    a pandas dataframe with aggregate share of top bigrams across source
+    """
+
     assert (len(top_bigrams_month_share) == 12)
     assert (len(total_bigrams_month) == 12)
     assert (len(top_bigrams) == 1000)
