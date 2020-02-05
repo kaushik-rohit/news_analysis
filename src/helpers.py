@@ -7,6 +7,35 @@ import db
 from copy import copy
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+id_to_name_map = {'400553': 'Belfast Telegraph Online',
+                  '377101': 'The Scotsman',
+                  '418973': 'dailyrecord.co.uk',
+                  '244365': 'Wales on Sunday',
+                  '8200': 'The Independent (United Kingdom)',
+                  '412338': 'walesonline.co.uk',
+                  '138794': 'DAILYMAIL',
+                  '232241': 'Sunday Express',
+                  '334988': 'The Sunday Telegraph (London)',
+                  '331369': 'Sunday Sun',
+                  '138620': 'The Guardian',
+                  '419001': 'mirror.co.uk',
+                  '8010': 'Guardian Weekly',
+                  '142728': 'The Herald (Glasgow)',
+                  '408506': 'Express Online',
+                  '143296': 'The Observer (London)',
+                  '363952': 'Daily Star Sunday',
+                  '145251': 'The People',
+                  '232240': 'The Express',
+                  '145253': 'Daily Record',
+                  '389195': 'telegraph.co.uk',
+                  '145254': 'The Mirror',
+                  '344305': 'Scotland on Sunday',
+                  '8109': 'The Daily Telegraph (London)',
+                  '397135': 'MailOnline',
+                  '163795': 'Belfast Telegraph',
+                  '412334': 'dailypost.co.uk',
+                  '408508': 'Daily Star Online',
+                  '411938': 'standard.co.uk'}
 
 
 def save(obj, name):
@@ -17,32 +46,6 @@ def save(obj, name):
 def save_json(obj, name):
     with open(name, 'wb') as f:
         json.dump(obj, f)
-
-
-def load_data(path):
-    newspapers = os.listdir(path)
-    df_daywise = []
-
-    for newspaper in newspapers:
-        year_2014 = os.path.join(os.path.join(path, newspaper), '2014')
-        df_path = os.path.join(year_2014, ' jan-2014 {}.csv'.format(newspaper))
-        df = pd.read_csv(df_path)
-        df = df.drop(df.columns[0], axis=1)
-        df = df.dropna()
-
-        # rename columns so it is consistent across data
-        df.columns = ['Source', 'Date', 'Program Name', 'Transcript']
-        df = df[(df['Program Name'] != "") & (df['Transcript'] != '')]
-
-        # parse date
-        df['Date'] = df.apply(lambda row: row['Date'].split('\n')[0], axis=1)
-        df['Date'] = df.apply(lambda row: date_parser.parse(row['Date']), axis=1)
-
-        df_daywise.append(df)
-
-    df_out = pd.concat(df_daywise, axis=0, ignore_index=True).reset_index()
-    df_out.to_pickle('./Jan_2014.pkl')
-    return df_out
 
 
 def parse_date(date):
@@ -56,7 +59,7 @@ def parse_date(date):
     return date_parser.parse(date)
 
 
-def raw_data_to_db(root):
+def raw_data_to_db(root, db_path='../articles.db'):
     """Inserts raw news articles data from csv files to a sqlite3 database after preprocessing.
     Parameters
     ----------
@@ -67,7 +70,7 @@ def raw_data_to_db(root):
     None
     """
     newspapers_id = os.listdir(root)
-    conn = db.ArticlesDb('../articles.db')
+    conn = db.ArticlesDb(db_path)
 
     for newspaper in newspapers_id:
         newspaper_path = os.path.join(root, newspaper)
@@ -82,15 +85,20 @@ def raw_data_to_db(root):
                 if os.path.exists(month_path):
                     print(month_path)
                     df = pd.read_csv(month_path)
-                    df = df.drop(df.columns[0], axis=1)
-                    df = df.dropna()
+                    df = df.drop(df.columns[0], axis=1)  # drop the index column
+                    df = df.dropna()  # drop rows with column value as nan
+
+                    # make column names consistent across csv
                     df.columns = ['Source', 'Date', 'Program Name', 'Transcript']
+                    # change source name to be consistent with it's id
+                    df['Source'] = id_to_name_map[newspaper]
+                    # drop rows where Transcript is empty string
                     df = df[(df['Program Name'] != "") | (df['Transcript'] != "")]
 
                     if df.empty:
                         continue
 
-                    df['Date'] = df.apply(lambda row: parse_date(row['Date']), axis=1)
+                    df['Date'] = df.apply(lambda row: parse_date(row['Date']), axis=1)  # date string to date object
                     df['Source'] = df.apply(lambda row: row['Source'].strip('.\n '), axis=1)
                     df['Transcript'] = df.apply(lambda row: row['Transcript'].strip(), axis=1)
 
