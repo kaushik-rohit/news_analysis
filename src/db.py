@@ -5,18 +5,18 @@ from datetime import date
 
 # create queries
 create_table_query = ("create table if not exists articles "
-                      "(source TEXT, "
+                      "(source_id TEXT, "
+                      "source TEXT, "
                       "day INTEGER, "
                       "month INTEGER, "
                       "year INTEGER, "
                       "program_name TEXT, "
                       "transcript TEXT, "
-                      "PRIMARY KEY (source, day, month, year, program_name));")
+                      "PRIMARY KEY (source_id, day, month, year, program_name));")
 
 # insert queries
-insert_table_query = ("insert or ignore into articles(source, day, month, year, program_name, "
-                      "transcript) values(?, ?, ?, ?, ?, ?);")
-
+insert_table_query = ("insert or ignore into articles(source_id, source, day, month, year, program_name, "
+                      "transcript) values(?, ?, ?, ?, ?, ?, ?);")
 
 # select queries
 select_articles_by_year_query = "select * from articles where year=?"
@@ -170,4 +170,4 @@ class ResultIterator:
 
     def __iter__(self):
         for row in self.rows:
-            yield Article(row[0], date(row[3], row[2], row[1]), row[4], row[5])
+            yield Article(row[0], row[1], date(row[4], row[3], row[2]), row[5], row[6])

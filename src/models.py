@@ -7,7 +7,8 @@ CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation,
 
 class Article:
 
-    def __init__(self, source, date, program_name, transcript):
+    def __init__(self, source_id, source, date, program_name, transcript):
+        self.source_id = source_id
         self.source = source
         self.date = date
         self.program_name = program_name

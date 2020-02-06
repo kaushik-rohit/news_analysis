@@ -55,6 +55,14 @@ def parse_date(date):
         date = date.split('/')[1]
     elif '-' in date:
         date = date.split('-')[1]
+    elif date.count(',') == 2:
+        date = date.split(',')[1]
+
+    if 'juliet' in date:
+        date = date.replace('juliet', 'july')
+
+    if 'juillet' in date:
+        date = date.replace('juillet', 'july')
 
     return date_parser.parse(date)
 
@@ -103,8 +111,8 @@ def raw_data_to_db(root, db_path='../articles.db'):
                     df['Transcript'] = df.apply(lambda row: row['Transcript'].strip(), axis=1)
 
                     articles = df.apply(lambda row: (
-                        row['Source'], row['Date'].day, row['Date'].month, row['Date'].year, row['Program Name'],
-                        row['Transcript']), axis=1).tolist()
+                        newspaper, row['Source'], row['Date'].day, row['Date'].month, row['Date'].year,
+                        row['Program Name'], row['Transcript']), axis=1).tolist()
 
                     conn.insert_articles(articles)
                 else:
