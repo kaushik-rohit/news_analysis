@@ -47,17 +47,18 @@ parser.add_argument('-t', '--threshold',
                     default=0.3,
                     help='threshold for cosine similarity to consider news articles in same cluster')
 
+parser.add_argument('--diff-source-incluster',
+                    type=bool,
+                    default=True,
+                    help='if True consider only articles from different source to be in cluster for same date')
 
-class Analysis:
-    def __init__(self, path, dct, tfidf_model, threshold, diff_source=True):
-        self.path = path
-        self.dct = dct
-        self.tfidf_model = tfidf_model
-        self.threshold = threshold
-        self.diff_source = diff_source
+parser.add_argument('--diff-source-tomorrow-cluster',
+                    type=bool,
+                    default=True,
+                    help='if True consider only articles from different source to be in cluster from next date')
 
 
-def get_pos_of_same_source_news(corpus1, corpus2):
+def get_pos_of_same_source_news(corpus1, corpus2=None):
     """
     The method calculates for each doc in corpus1, a list of indexes at which doc
     in corpus2 have same news source.
@@ -69,10 +70,16 @@ def get_pos_of_same_source_news(corpus1, corpus2):
 
     Returns
     -------
+    if corpus2 is not None:
     a list of list containing indexes of corpus2, ith list contains indexes for
     doc[i] in corpus1 at which docs in corpus2 have same news source
-
+    else if corpus2 is None:
+    a list of list containing indexes of corpus1, ith list contains indexes for
+    doc[i] in corpus1 at which docs in corpus1 have same news source
     """
+    if corpus2 is None:
+        corpus2 = corpus1
+
     corpus1_len = len(corpus1)
     corpus2_len = len(corpus2)
     same_source_indices = []
@@ -181,7 +188,7 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
     return similar_articles
 
 
-def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
+def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source=True):
     """This method returns all the article from the corpus input such that
     there is no other article in corpus with which it has cosine similarity
     greater than threshold.
@@ -207,8 +214,25 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3):
     # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, corpus))], num_features=len(dct))
     index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
 
+    # if we only want diff source articles cluster, we need to calculate at what indices
+    # same source news occurs so that it similarities at these indices can be masked
+    if diff_source:
+        indices_of_same_source = get_pos_of_same_source_news(corpus)
+
     for idx, similarities in enumerate(index):
-        if np.count_nonzero(np.array(similarities) > threshold) <= 1:
+
+        # mask all the similarities where articles have some source
+        # since we only want to know unclustered articles forming cluster
+        # from next day articles but different source
+        if diff_source and len(indices_of_same_source[idx]) != 0:
+            indices_of_same_source_i = indices_of_same_source[idx]
+
+            assert (len(similarities) >= len(indices_of_same_source_i))
+            assert (len(similarities) > max(indices_of_same_source_i))
+
+            similarities[indices_of_same_source_i] = 0
+
+        if np.count_nonzero(np.array(similarities) > threshold) == 0:
             indices += [idx]
 
     return indices
@@ -297,7 +321,7 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=False, thr
     pool.close()
     stats = list(zip(*stats))
     source_counts = stats[1]
-    source_counts = combine_dictionaries(source_counts)
+    source_counts = helpers.combine_dictionaries(source_counts)
     stats = pd.concat(stats[0])
 
     # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
