@@ -1,7 +1,6 @@
 import argparse
 from gensim import models
 from gensim import corpora
-from gensim.models.phrases import Phrases, Phraser
 import db
 import os
 from models import BoWIter, CorpusIter
