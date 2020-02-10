@@ -1,8 +1,11 @@
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
 from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
+import helpers
 
-CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation,
-                  remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces]
+CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation, remove_stopwords, stem_text,
+                  strip_non_alphanum, strip_multiple_whitespaces]
+
+# helpers.remove_stemmed_phrases,
 
 
 class Article:

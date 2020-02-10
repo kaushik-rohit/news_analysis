@@ -159,3 +159,13 @@ def combine_dictionaries(dct):
         ret = combine_dct(ret, dct[i])
 
     return ret
+
+
+def remove_stemmed_phrases(s):
+    STOPWORDS = []
+    phrases = pd.read_csv('../data/alpha_betas_party.csv')['bigram'].tolist()
+
+    for phrase in phrases:
+        STOPWORDS.extend(phrase.split('_'))
+
+    return " ".join(w for w in s.split() if w not in STOPWORDS)
