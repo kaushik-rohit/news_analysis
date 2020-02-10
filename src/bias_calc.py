@@ -8,7 +8,6 @@ from nltk.stem import PorterStemmer
 from nltk.corpus import stopwords
 from gensim import corpora, models
 from cluster_analysis import get_articles_not_in_cluster, get_similar_articles
-import helpers
 import multiprocessing as mp
 from collections import Counter
 from tqdm import tqdm
@@ -56,6 +55,13 @@ parser.add_argument('-pb', '--parliament-bigrams',
                     type=str,
                     required=True,
                     help='the path to top n bigrams from parliament speeches')
+
+parser.add_argument('-g', '--group-by',
+                    type=str,
+                    choices=['source_id', 'source_name'],
+                    default='source_name',
+                    help='whether bias is categorized by source id or source name. Multiple source id can have same'
+                         'name because online and print version have different id')
 
 porter = PorterStemmer()
 
@@ -166,7 +172,7 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     return in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster
 
 
-def get_bigrams_for_single_article(article):
+def get_bigrams_for_single_article(article, group_by):
     """
     Calculates bigrams present in a news article
     Parameters
@@ -188,10 +194,13 @@ def get_bigrams_for_single_article(article):
     for i in range(len(bigram)):
         bigram[i] = bigram[i][0] + '_' + bigram[i][1]
 
+    if group_by == 'source_id':
+        return article.source_id, bigram
+
     return article.source, bigram
 
 
-def get_bigrams_in_articles(articles):
+def get_bigrams_in_articles(articles, group_by):
     """
     Calculates bigrams present in a list of news articles. These bigrams are combined and grouped by news source.
     It calculates the bigram for articles in parallel and later combine these bigrams to form a dictionary.
@@ -211,8 +220,10 @@ def get_bigrams_in_articles(articles):
 
     pool = mp.Pool(mp.cpu_count())  # using parallel processing
 
-    for _ in tqdm(pool.imap_unordered(get_bigrams_for_single_article, articles), total=len(articles)):
-        bigrams_by_source.append(_)
+    bigrams_by_source = pool.starmap(get_bigrams_for_single_article, [(article, group_by) for article in articles])
+
+    # for _ in tqdm(pool.imap_unordered(get_bigrams_for_single_article, articles), total=len(articles)):
+    #     bigrams_by_source.append(_)
 
     pool.close()
 
@@ -257,7 +268,7 @@ def _convert_bigrams_to_shares(all_bigrams):
     return total_count_by_source
 
 
-def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold=0.3):
+def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold=0.3):
     """
     A wrapper function to return the bigrams present in the news articles for the given year and month for different
     clusters.
@@ -268,6 +279,7 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     tfidf_model: (gensim tfidf model)
     year: (int)
     month: (int)
+    group_by: (string)
     threshold: (float) the threshold for cosine similarity which is used to determine if two articles are in same
     cluster or not.
 
@@ -290,13 +302,13 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     assert (n_articles == (len(in_cluster) + len(not_in_cluster)))
 
     print('calculating bigrams for in cluster articles')
-    bigrams_in_cluster = get_bigrams_in_articles(in_cluster)
+    bigrams_in_cluster = get_bigrams_in_articles(in_cluster, group_by)
     print('calculating bigrams for not in cluster articles')
-    bigrams_not_in_cluster = get_bigrams_in_articles(not_in_cluster)
+    bigrams_not_in_cluster = get_bigrams_in_articles(not_in_cluster, group_by)
     print('calculating bigrams for in tomorrow cluster articles')
-    bigrams_in_cluster_tomorrow = get_bigrams_in_articles(in_cluster_tomorrow)
+    bigrams_in_cluster_tomorrow = get_bigrams_in_articles(in_cluster_tomorrow, group_by)
     print('calculating bigrams for all articles')
-    bigrams_all_articles = get_bigrams_in_articles(all_articles)
+    bigrams_all_articles = get_bigrams_in_articles(all_articles, group_by)
 
     return bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles
 
@@ -449,7 +461,7 @@ def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluste
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, threshold=0.3):
+def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, threshold=0.3):
     """
     Parameters
     ----------
@@ -473,7 +485,7 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     """
 
     bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
-        get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold)
+        get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
 
     print('converting bigrams list to fractional count')
     _convert_bigrams_to_shares(bigrams_all_articles)
@@ -626,7 +638,7 @@ def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, 
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, threshold=0.3):
+def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, threshold=0.3):
     """
     Parameters
     ----------
@@ -657,7 +669,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, thr
     # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
     for month in range(1, 12 + 1):
         bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
-            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, threshold)
+            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
 
         # convert bigrams list to bigrams shares
         total_bigrams_all_articles = _convert_bigrams_to_shares(bigrams_all_articles)
@@ -766,13 +778,16 @@ def main():
     db_path = args.db_path
     top1000_bigrams_path = args.parliament_bigrams
     top_1000_bigrams = pd.read_csv(top1000_bigrams_path)
+    group_by = args.group_by
 
     if month is None:
-        result = bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, threshold=threshold)
-        result.to_csv(path_or_buf='../results/bias_{}.csv'.format(year))
+        result = bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by,
+                                         threshold=threshold)
+        result.to_csv(path_or_buf='../results/bias_{}_{}.csv'.format(year, group_by))
     else:
-        result = bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, threshold=threshold)
-        result.to_csv(path_or_buf='../results/bias_{}_{}.csv'.format(year, month))
+        result = bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by,
+                                          threshold=threshold)
+        result.to_csv(path_or_buf='../results/bias_{}_{}_{}.csv'.format(year, month, group_by))
 
 
 if __name__ == '__main__':
