@@ -8,7 +8,6 @@ from nltk.stem import PorterStemmer
 from nltk.corpus import stopwords
 from gensim import corpora, models
 from cluster_analysis import get_articles_not_in_cluster, get_similar_articles
-import multiprocessing as mp
 import parmap
 from collections import Counter
 from tqdm import tqdm
@@ -134,7 +133,7 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
                                             unclustered_articles_indices_in_day2_cluster]
 
     for idx, indices in unclustered_articles_indices_in_day2_cluster:
-        source = articles_day1[idx].source
+        source = unclustered_articles[idx].source
         for i in indices:
             within_source_cluster[source].append(articles_day2[i])
 
