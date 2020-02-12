@@ -1,4 +1,5 @@
 tqdm
+parmap
 nltk
 python-dateutil
 scikit-learn
