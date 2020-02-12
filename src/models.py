@@ -1,6 +1,5 @@
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
 from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
-import helpers
 
 CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation, remove_stopwords, stem_text,
                   strip_non_alphanum, strip_multiple_whitespaces]
@@ -16,6 +15,10 @@ class Article:
         self.date = date
         self.program_name = program_name
         self.transcript = transcript
+
+    def __str__(self):
+        return 'article id: {}, name: {}, date: {}, program_name: {}'.format(self.source_id, self.source, self.date,
+                                                                             self.program_name)
 
     def equals(self, article):
         if (self.source == article.source and
