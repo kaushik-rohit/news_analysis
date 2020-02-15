@@ -11,6 +11,7 @@ from cluster_analysis import get_articles_not_in_cluster, get_similar_articles
 import parmap
 from collections import Counter
 from tqdm import tqdm
+import multiprocessing as mp
 import numpy as np
 import db
 import string
@@ -119,6 +120,7 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
     next_date = curr_date + delta
     conn = db.ArticlesDb(path)
 
+    print('calculating clusters for {}'.format(curr_date))
     within_source_cluster = {source: [] for source in source_names}
 
     articles_day1 = list(conn.select_articles_by_date(curr_date))
@@ -128,7 +130,8 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     clustered_articles = [articles_day1[i] for i in range(len(articles_day1)) if i not in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
-                                                                        tfidf_model, threshold=threshold)
+                                                                        tfidf_model, threshold=threshold,
+                                                                        diff_source=False)
     unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
                                             unclustered_articles_indices_in_day2_cluster]
 
@@ -173,7 +176,10 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
 
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
     print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
-    stats = parmap.map(get_cluster_for_the_day, date_range, path, dct, tfidf_model, threshold, pm_pbar=True)
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    stats = pool.starmap(get_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
+                                                   for curr_date in date_range])
+    pool.close()
 
     for stat in stats:
         in_cluster_articles += stat[0]
@@ -212,7 +218,7 @@ def get_bigrams_for_single_article(article, group_by):
     return article.source, bigram
 
 
-def get_bigrams_in_articles(articles, group_by):
+def get_bigrams_in_articles(articles, group_by, pbar=True):
     """
     Calculates bigrams present in a list of news articles. These bigrams are combined and grouped by news source.
     It calculates the bigram for articles in parallel and later combine these bigrams to form a dictionary.
@@ -229,7 +235,7 @@ def get_bigrams_in_articles(articles, group_by):
 
     all_bigrams = {source: [] for source in source_names}
 
-    bigrams_by_source = parmap.map(get_bigrams_for_single_article, articles, group_by, pm_pbar=True)
+    bigrams_by_source = parmap.map(get_bigrams_for_single_article, articles, group_by, pm_pbar=pbar)
 
     # for _ in tqdm(pool.imap_unordered(get_bigrams_for_single_article, articles), total=len(articles)):
     #     bigrams_by_source.append(_)
@@ -317,9 +323,9 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
 
     bigrams_within_source_cluster = {}
 
-    for key, val in within_source_cluster.items():
-        print('calculating bigrams for within cluster source articles {}'.format(key))
-        bigrams_within_source_cluster[key] = get_bigrams_in_articles(val, group_by)
+    print('calculating bigrams for within cluster source articles')
+    for key, val in tqdm(within_source_cluster.items()):
+        bigrams_within_source_cluster[key] = get_bigrams_in_articles(val, group_by, pbar=False)
 
     print('calculating bigrams for in cluster articles')
     bigrams_in_cluster = get_bigrams_in_articles(in_cluster, group_by)
@@ -351,7 +357,7 @@ def standardize_bigrams_count(top_bigrams_share_by_source):
 
     assert (len(bigram_set) == 1000)
 
-    for bigram in tqdm(bigram_set):
+    for bigram in bigram_set:
         std = top_bigrams_share_by_source[bigram].std()
         mean = top_bigrams_share_by_source[bigram].mean()
         top_bigrams_share_by_source[bigram] = (top_bigrams_share_by_source[bigram] - mean) / std
@@ -360,7 +366,6 @@ def standardize_bigrams_count(top_bigrams_share_by_source):
 
 
 def standardize_bigrams_count_group_by_source(top_bigrams_share_by_source):
-
     for source, bigram in top_bigrams_share_by_source.items():
         top_bigrams_share_by_source[source] = standardize_bigrams_count(top_bigrams_share_by_source[source])
 
@@ -390,7 +395,7 @@ def get_shares_of_top_1000_bigrams_for_source(source, bigram_freq, top1000_bigra
     return row
 
 
-def get_shares_of_top1000_bigrams(top1000_bigram, bigrams):
+def get_shares_of_top1000_bigrams(top1000_bigram, bigrams, pbar=True):
     """
     Calculates the shares of top 1000 bigrams occurring in bigrams grouped by news source
     Parameters
@@ -405,7 +410,7 @@ def get_shares_of_top1000_bigrams(top1000_bigram, bigrams):
 
     assert (len(top1000_bigram) == 1000)
 
-    rows = parmap.starmap(get_shares_of_top_1000_bigrams_for_source, bigrams.items(), top1000_bigram, pm_pbar=True)
+    rows = parmap.starmap(get_shares_of_top_1000_bigrams_for_source, bigrams.items(), top1000_bigram, pm_pbar=pbar)
 
     columns = ['source'] + top1000_bigram
 
@@ -427,8 +432,8 @@ def get_shares_of_top1000_bigrams_grouped_by_source(top1000_bigram, bigrams_by_s
     assert (len(top1000_bigram) == 1000)
     shares_by_source = {key: None for key in bigrams_by_source.keys()}
 
-    for source, bigrams in bigrams_by_source.items():
-        shares_by_source[source] = get_shares_of_top1000_bigrams(top1000_bigram, bigrams)
+    for source, bigrams in tqdm(bigrams_by_source.items()):
+        shares_by_source[source] = get_shares_of_top1000_bigrams(top1000_bigram, bigrams, pbar=False)
 
     return shares_by_source
 
@@ -684,6 +689,11 @@ def aggregate_bigrams_month_count_grouped_by_source(total_bigrams_for_month):
 def aggregate_bigrams_month_share_for_source(source, top_bigrams_month_share, total_bigrams_month,
                                              aggregate_source_count):
     weighted_shares = np.array([0] * 1000, dtype=float)
+
+    if aggregate_source_count[source] == 0:
+        row = [source] + weighted_shares.tolist()
+        return row
+
     for i in range(12):
         top_bigrams_shares_for_month = top_bigrams_month_share[i]
         total_bigrams_for_month = total_bigrams_month[i]
@@ -853,10 +863,11 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
                                                                  top_bigrams)
 
     print('aggregating bigram share for within source articles')
-    aggregate_share_within_source = aggregate_bigrams_month_share_group_by_source(top_bigrams_freq_within_source,
-                                                                                  total_bigrams_by_month_within_source,
-                                                                                  aggregate_source_count_within_source,
-                                                                                  top_bigrams)
+    aggregate_share_within_source = aggregate_bigrams_month_share_group_by_source(
+        top_bigrams_share_by_month_within_source,
+        total_bigrams_by_month_within_source,
+        aggregate_source_count_within_source,
+        top_bigrams)
 
     aggregate_share_all_articles.to_csv(path_or_buf='../results/shares_all_articles_{}.csv'.format(year))
     aggregate_share_in_cluster.to_csv(path_or_buf='../results/shares_in_cluster_{}.csv'.format(year))
@@ -891,7 +902,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         top1000_bigram)
 
     print('calculating bias within source')
-    bias_within_source = calculate_bias_group_by_source(aggregate_source_count_within_source, top1000_bigram)
+    bias_within_source = calculate_bias_group_by_source(aggregate_share_within_source, top1000_bigram)
     bias_within_source.to_csv(path_or_buf='../results/bias_within_source_{}'.format(year))
 
     return _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
