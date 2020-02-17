@@ -199,7 +199,7 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
         not_in_cluster_articles += stat[1]
         not_in_cluster_but_next_day_cluster += stat[2]
         within_source_tomorrow_cluster = helpers.combine_dct(within_source_tomorrow_cluster, stat[3])
-        within_source_in_cluster = helpers.combine_dct(within_source_in_cluster, stat[3])
+        within_source_in_cluster = helpers.combine_dct(within_source_in_cluster, stat[4])
 
     return (in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster,
             within_source_tomorrow_cluster, within_source_in_cluster)
@@ -851,7 +851,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         print('get shares of top bigrams for within source cluster tomorrow')
         top_bigrams_freq_within_source_tomorrow = get_shares_of_top1000_bigrams_grouped_by_source(
             top_bigrams, bigrams_within_source_tomorrow)
-        print('get shares of top bigrams for within source cluster tomorrow')
+        print('get shares of top bigrams for within source in cluster')
         top_bigrams_freq_within_source_in_cluster = get_shares_of_top1000_bigrams_grouped_by_source(
             top_bigrams, bigrams_within_source_in_cluster)
 
