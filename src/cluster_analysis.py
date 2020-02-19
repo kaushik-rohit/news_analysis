@@ -232,6 +232,8 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_so
 
             similarities[indices_of_same_source_i] = 0
 
+        similarities[idx] = 0  # mask similarity with itself
+
         if np.count_nonzero(np.array(similarities) > threshold) == 0:
             indices += [idx]
 
