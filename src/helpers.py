@@ -7,35 +7,45 @@ import db
 from copy import copy
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-id_to_name_map = {'400553': 'Belfast Telegraph',
-                  '377101': 'Scotsman',
-                  '418973': 'Record',
-                  '244365': 'Wales',
-                  '8200': 'Independent',
-                  '412338': 'Wales',
-                  '138794': 'Mail',
-                  '232241': 'Express',
-                  '334988': 'Telegraph',
-                  '331369': 'Sun',
-                  '138620': 'Guardian',
-                  '419001': 'Mirror',
-                  '8010': 'Guardian',
-                  '142728': 'Herald',
-                  '408506': 'Express',
-                  '143296': 'Observer',
-                  '363952': 'Star',
-                  '145251': 'People',
-                  '232240': 'Express',
-                  '145253': 'Record',
-                  '389195': 'Telegraph',
-                  '145254': 'Mirror',
-                  '344305': 'Scotland',
-                  '8109': 'Telegraph',
-                  '397135': 'Mail',
-                  '163795': 'Belfast Telegraph',
-                  '412334': 'Post',
-                  '408508': 'Star',
-                  '411938': 'Standard'}
+
+source_names = ['Sun', 'Mirror', 'Belfast Telegraph', 'Record', 'Independent', 'Observer', 'Guardian', 'People',
+                'Telegraph', 'Mail', 'Express', 'Post', 'Herald', 'Star', 'Wales', 'Scotland', 'Standard', 'Scotsman']
+
+source_ids = ['400553', '377101', '418973', '244365', '8200', '412338', '138794', '232241', '334988', '331369',
+              '138620', '419001', '8010', '142728', '408506', '143296', '363952', '145251', '232240', '145253',
+              '389195', '145254', '344305', '8109', '397135', '163795', '412334', '408508', '411938']
+
+id_to_name_map = {
+    '400553': 'Belfast Telegraph',
+    '377101': 'Scotsman',
+    '418973': 'Record',
+    '244365': 'Wales',
+    '8200': 'Independent',
+    '412338': 'Wales',
+    '138794': 'Mail',
+    '232241': 'Express',
+    '334988': 'Telegraph',
+    '331369': 'Sun',
+    '138620': 'Guardian',
+    '419001': 'Mirror',
+    '8010': 'Guardian',
+    '142728': 'Herald',
+    '408506': 'Express',
+    '143296': 'Observer',
+    '363952': 'Star',
+    '145251': 'People',
+    '232240': 'Express',
+    '145253': 'Record',
+    '389195': 'Telegraph',
+    '145254': 'Mirror',
+    '344305': 'Scotland',
+    '8109': 'Telegraph',
+    '397135': 'Mail',
+    '163795': 'Belfast Telegraph',
+    '412334': 'Post',
+    '408508': 'Star',
+    '411938': 'Standard'
+}
 
 
 def save(obj, name):
