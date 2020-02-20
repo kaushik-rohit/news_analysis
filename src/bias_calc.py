@@ -3,7 +3,7 @@ import calendar
 from datetime import date, timedelta
 import pandas as pd
 from gensim import corpora, models
-from cluster_analysis import get_articles_not_in_cluster, get_similar_articles
+from cluster_analysis import get_articles_not_in_cluster, get_similar_articles, get_articles_in_cluster
 import parmap
 from tqdm import tqdm
 import multiprocessing as mp
@@ -61,8 +61,8 @@ parser.add_argument('-g', '--group-by',
                          'name because online and print version have different id')
 
 parser.add_argument('-w', '--within-source',
-                    type=bool,
                     default=False,
+                    action='store_true',
                     help='If true bias between source to source reporting would be calculated')
 
 
@@ -104,18 +104,16 @@ def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, thr
 
     for idx, indices in unclustered_articles_indices_in_day2_cluster:
         source = unclustered_articles[idx].source
-        for i in indices:
-            within_source_tomorrow_cluster[source].append(articles_day2[i])
+        articles = [articles_day2[i] for i in indices]
+        within_source_tomorrow_cluster[source] += articles
 
-    within_source_in_cluster_indices = get_similar_articles(articles_day1, articles_day1, dct, tfidf_model,
-                                                            threshold=threshold, diff_source=False)
+    within_source_in_cluster_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold,
+                                                               diff_source=False)
 
     for idx, indices in within_source_in_cluster_indices:
         source = articles_day1[idx].source
-        for i in indices:
-            if i == idx:
-                continue
-            within_source_in_cluster[source].append(articles_day1[i])
+        articles = [articles_day1[i] for i in indices if i != idx]
+        within_source_in_cluster[source] += articles
 
     return within_source_tomorrow_cluster, within_source_in_cluster
 
@@ -400,7 +398,7 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
 
     bias_by_source = {}
 
-    for index, row in tqdm(top1000_bigrams_freq_by_source.iterrows()):
+    for index, row in top1000_bigrams_freq_by_source.iterrows():
         num = 0
         den = 0
         # print('count of source {} is {} '.format(row['source'], bigrams_count_by_source[row['source']]))
@@ -423,16 +421,19 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
     return bias_by_source
 
 
-def calculate_bias_group_by_source(aggregate_shares, top1000_bigram):
-    rows = []
-    columns = ['source'] + helpers.source_names
+def calculate_bias_group_by_source_helper(source, aggregate_shares, top1000_bigram):
+    bias = calculate_bias(aggregate_shares[source], top1000_bigram)
+    row = [source]
+    for source_name in helpers.source_names:
+        row += [bias[source_name]]
+    return row
 
-    for source in aggregate_shares.keys():
-        bias = calculate_bias(aggregate_shares[source], top1000_bigram)
-        row = [source]
-        for source_name in helpers.source_names:
-            row += [bias[source_name]]
-        rows += [row]
+
+def calculate_bias_group_by_source(aggregate_shares, top1000_bigram):
+    columns = ['source'] + helpers.source_names
+    sources = aggregate_shares.keys()
+
+    rows = parmap.map(calculate_bias_group_by_source_helper, sources, aggregate_shares, top1000_bigram, pm_pbar=True)
 
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
@@ -546,8 +547,9 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
         print('calculating bias of news source by cluster groups')
         bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = parmap.map(
-            calculate_bias, [top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster,
-                             top_bigrams_freq_not_in_cluster, top_bigrams_freq_in_cluster_tomorrow], top1000_bigram)
+            calculate_bias,
+            [top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster, top_bigrams_freq_not_in_cluster,
+             top_bigrams_freq_in_cluster_tomorrow], top1000_bigram, pm_pbar=True)
 
         combined_bias_df = _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
                                                                 bias_in_cluster_tomorrow)
