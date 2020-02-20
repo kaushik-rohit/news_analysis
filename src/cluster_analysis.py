@@ -188,6 +188,55 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
     return similar_articles
 
 
+def get_articles_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source=True):
+    """
+    Calculates similarity of articles from corpus with all the articles and return a list of indices of articles to
+    which it is similar expect itself. If diff source is True then articles can only be similar to articles from
+    different source.
+
+    Parameters
+    ----------
+    @corpus: list of Articles
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
+    @threshold: threshold for considering articles similar
+    @diff_source: if similar articles are from different source
+
+    Returns
+    -------
+    list of tuples, where the first element in the tuple is the index of articles from corpus which have
+    atleast one article within corpus except itself with greater similarity and the second element in the tuple is the
+     index of articles at which similarity threshold is greater
+    """
+
+    in_cluster = []
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
+    # if we only want diff source articles cluster, we need to calculate at what indices
+    # same source news occurs so that it similarities at these indices can be masked
+    if diff_source:
+        indices_of_same_source = get_pos_of_same_source_news(corpus)
+
+    for idx, similarities in enumerate(index):
+
+        # mask all the similarities where articles have some source
+        # since we only want to know unclustered articles forming cluster
+        # from next day articles but different source
+        if diff_source and len(indices_of_same_source[idx]) != 0:
+            indices_of_same_source_i = indices_of_same_source[idx]
+
+            assert (len(similarities) >= len(indices_of_same_source_i))
+            assert (len(similarities) > max(indices_of_same_source_i))
+
+            similarities[indices_of_same_source_i] = 0
+
+        similarities[idx] = 0  # mask similarity with itself
+        indices_where_similarity_greater_than_threshold = np.argwhere(similarities > threshold).flatten()
+        if indices_where_similarity_greater_than_threshold.size > 0:
+            in_cluster += [(idx, list(indices_where_similarity_greater_than_threshold))]
+
+    return in_cluster
+
+
 def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source=True):
     """This method returns all the article from the corpus input such that
     there is no other article in corpus with which it has cosine similarity
