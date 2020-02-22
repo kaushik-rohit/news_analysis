@@ -95,20 +95,17 @@ def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, thr
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
 
-    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold,
-                                                               diff_source=False)
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
-                                                                        tfidf_model, threshold=threshold,
-                                                                        diff_source=False)
+                                                                        tfidf_model, threshold=threshold)
 
     for idx, indices in unclustered_articles_indices_in_day2_cluster:
         source = unclustered_articles[idx].source
         articles = [articles_day2[i] for i in indices]
         within_source_tomorrow_cluster[source] += articles
 
-    within_source_in_cluster_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold,
-                                                               diff_source=False)
+    within_source_in_cluster_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
 
     for idx, indices in within_source_in_cluster_indices:
         source = articles_day1[idx].source
@@ -644,11 +641,13 @@ def aggregate_bigrams_month_share_for_source(source, top_bigrams_month_share, to
     return row
 
 
-def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, aggregate_source_count, top_bigrams):
+def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, aggregate_source_count, top_bigrams,
+                                  pbar=True):
     """
 
     Parameters
     ----------
+    pbar
     top_bigrams_month_share: (list)
     total_bigrams_month: (list)
     aggregate_source_count: (dictionary)
@@ -669,7 +668,7 @@ def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, 
     columns = ['source'] + top_bigrams
 
     rows = parmap.map(aggregate_bigrams_month_share_for_source, sources, top_bigrams_month_share, total_bigrams_month,
-                      aggregate_source_count, pm_pbar=True)
+                      aggregate_source_count, pm_pbar=pbar)
 
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
@@ -677,11 +676,12 @@ def aggregate_bigrams_month_share(top_bigrams_month_share, total_bigrams_month, 
 def aggregate_bigrams_month_share_group_by_source(top_bigrams_month_share, total_bigrams_month, aggregate_source_count,
                                                   top_bigrams):
     aggregate_bigrams_share = {}
-    for source in helpers.source_names:
+    for source in tqdm(helpers.source_names):
         bigrams_month_share = [top_bigrams_month_share[i][source] for i in range(12)]
         bigrams_month_count = [total_bigrams_month[i][source] for i in range(12)]
         aggregate_bigrams_share[source] = aggregate_bigrams_month_share(bigrams_month_share, bigrams_month_count,
-                                                                        aggregate_source_count[source], top_bigrams)
+                                                                        aggregate_source_count[source], top_bigrams,
+                                                                        pbar=False)
 
     return aggregate_bigrams_share
 

@@ -46,20 +46,23 @@ def get_bigrams_for_single_article(article, group_by):
     (source, bigram) source name and list of bigrams in article transcript as a tuple
     """
 
-    sentences = nltk.sent_tokenize(article.transcript.lower())
-    tokenized = map(nltk.tokenize.word_tokenize, sentences)
-    tokenized = map(preprocess, tokenized)
-    tokenized = map(stem_wrapper, tokenized)
-    bigrams = map(ngrams_wrapper, tokenized)
-    bigram = list(itertools.chain.from_iterable(bigrams))
+    if article.bigrams is None:
+        sentences = nltk.sent_tokenize(article.transcript.lower())
+        tokenized = map(nltk.tokenize.word_tokenize, sentences)
+        tokenized = map(preprocess, tokenized)
+        tokenized = map(stem_wrapper, tokenized)
+        bigrams = map(ngrams_wrapper, tokenized)
+        bigram = list(itertools.chain.from_iterable(bigrams))
 
-    for i in range(len(bigram)):
-        bigram[i] = bigram[i][0] + '_' + bigram[i][1]
+        for i in range(len(bigram)):
+            bigram[i] = bigram[i][0] + '_' + bigram[i][1]
+
+        article.bigrams = bigram
 
     if group_by == 'source_id':
-        return article.source_id, bigram
+        return article.source_id, article.bigrams
 
-    return article.source, bigram
+    return article.source, article.bigrams
 
 
 def get_bigrams_in_articles(articles, group_by, pbar=True):

@@ -15,6 +15,7 @@ class Article:
         self.date = date
         self.program_name = program_name
         self.transcript = transcript
+        self.bigrams = None
 
     def __str__(self):
         return 'article id: {}, name: {}, date: {}, program_name: {}'.format(self.source_id, self.source, self.date,
