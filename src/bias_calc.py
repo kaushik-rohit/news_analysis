@@ -61,7 +61,6 @@ parser.add_argument('-g', '--group-by',
                          'name because online and print version have different id')
 
 parser.add_argument('-w', '--within-source',
-                    default=False,
                     action='store_true',
                     help='If true bias between source to source reporting would be calculated')
 
@@ -777,7 +776,8 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
         for month in range(1, 12 + 1):
             bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
-                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
+                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by,
+                                                           threshold=threshold)
 
             # convert bigrams list to bigrams shares
             total_bigrams_all_articles = bigrams.convert_bigrams_to_shares(bigrams_all_articles)
@@ -881,6 +881,7 @@ def main():
     top_1000_bigrams = pd.read_csv(top1000_bigrams_path)
     group_by = args.group_by
     within_source = args.within_source
+
     if month is None:
         bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, within_source,
                                 threshold=threshold)
