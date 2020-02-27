@@ -1,9 +1,7 @@
 import argparse
-import calendar
-from datetime import date, timedelta
 import pandas as pd
 from gensim import corpora, models
-from cluster_analysis import get_articles_not_in_cluster, get_similar_articles, get_articles_in_cluster
+import cluster_analysis
 import parmap
 from tqdm import tqdm
 import multiprocessing as mp
@@ -64,191 +62,21 @@ parser.add_argument('-w', '--within-source',
                     action='store_true',
                     help='If true bias between source to source reporting would be calculated')
 
-
-def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
-    """
-    Parameters
-    ----------
-    path: (string) path to articles database
-    dct: (gensim dictionary)
-    tfidf_model: (gensim tfidf model)
-    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
-    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
-
-    Returns
-    -------
-    clustered_articles: the list of articles for curr_date which are in cluster with other articles
-    unclustered_articles: the list of articles for curr_date which are not in cluster with any other article
-    unclustered_articles_in_day2_cluster: list of articles for curr_date which are not in cluster with any other article
-    from same date but are in cluster with articles from next day
-    """
-
-    delta = timedelta(days=1)
-    next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
-
-    print('calculating within source clusters for {}'.format(curr_date))
-    within_source_tomorrow_cluster = {source: [] for source in helpers.source_names}
-    within_source_in_cluster = {source: [] for source in helpers.source_names}
-
-    articles_day1 = list(conn.select_articles_by_date(curr_date))
-    articles_day2 = list(conn.select_articles_by_date(next_date))
-
-    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
-    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
-    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
-                                                                        tfidf_model, threshold=threshold)
-
-    for idx, indices in unclustered_articles_indices_in_day2_cluster:
-        source = unclustered_articles[idx].source
-        articles = [articles_day2[i] for i in indices]
-        within_source_tomorrow_cluster[source] += articles
-
-    within_source_in_cluster_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
-
-    for idx, indices in within_source_in_cluster_indices:
-        source = articles_day1[idx].source
-        articles = [articles_day1[i] for i in indices if i != idx]
-        within_source_in_cluster[source] += articles
-
-    return within_source_tomorrow_cluster, within_source_in_cluster
+parser.add_argument('-bt', '--bias-type',
+                    type=str,
+                    choices=['general', 'within_cluster', 'median_groups'],
+                    default='general',
+                    help='')
 
 
-def get_within_source_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
-    """
-    Calculate different clusters of news articles for a given month and return the list of articles which are in
-    cluster, which are not in cluster with any other article or articles which are not in cluster with any other
-    article from the same day but in cluster with articles from next day.
-
-    The method makes use of parallel processing and the 4 groups or clusters are calculated in parallel for each day and
-    later combined to form lists for entire month.
-    Parameters
-    ----------
-    @path: (string) path to location of articles database
-    @dct: (gensim dictionary object)
-    @tfidf_model: gensim tfidf model
-    @year: (int)
-    @month: (int)
-    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
-
-    Returns
-    -------
-    3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
-    """
-
-    assert (1 > threshold > 0)
-    start_date = date(year, month, 1)
-    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
-
-    within_source_tomorrow_cluster = {source: [] for source in helpers.source_names}
-    within_source_in_cluster = {source: [] for source in helpers.source_names}
-
-    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
-    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    stats = pool.starmap(get_within_source_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
-                                                                 for curr_date in date_range])
-    pool.close()
-
-    for stat in stats:
-        within_source_tomorrow_cluster = helpers.combine_dct(within_source_tomorrow_cluster, stat[0])
-        within_source_in_cluster = helpers.combine_dct(within_source_in_cluster, stat[1])
-
-    return within_source_tomorrow_cluster, within_source_in_cluster
-
-
-def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
-    """
-    Parameters
-    ----------
-    path: (string) path to articles database
-    dct: (gensim dictionary)
-    tfidf_model: (gensim tfidf model)
-    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
-    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
-
-    Returns
-    -------
-    clustered_articles: the list of articles for curr_date which are in cluster with other articles
-    unclustered_articles: the list of articles for curr_date which are not in cluster with any other article
-    unclustered_articles_in_day2_cluster: list of articles for curr_date which are not in cluster with any other article
-    from same date but are in cluster with articles from next day
-    """
-
-    delta = timedelta(days=1)
-    next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
-
-    print('calculating clusters for {}'.format(curr_date))
-
-    articles_day1 = list(conn.select_articles_by_date(curr_date))
-    articles_day2 = list(conn.select_articles_by_date(next_date))
-
-    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
-    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
-    clustered_articles = [articles_day1[i] for i in range(len(articles_day1)) if i not in unclustered_articles_indices]
-    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
-                                                                        tfidf_model, threshold=threshold)
-
-    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
-                                            unclustered_articles_indices_in_day2_cluster]
-
-    return clustered_articles, unclustered_articles, unclustered_articles_in_day2_cluster
-
-
-def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
-    """
-    Calculate different clusters of news articles for a given month and return the list of articles which are in
-    cluster, which are not in cluster with any other article or articles which are not in cluster with any other
-    article from the same day but in cluster with articles from next day.
-
-    The method makes use of parallel processing and the 4 groups or clusters are calculated in parallel for each day and
-    later combined to form lists for entire month.
-    Parameters
-    ----------
-    @path: (string) path to location of articles database
-    @dct: (gensim dictionary object)
-    @tfidf_model: gensim tfidf model
-    @year: (int)
-    @month: (int)
-    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
-
-    Returns
-    -------
-    3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
-    """
-
-    assert (1 > threshold > 0)
-    start_date = date(year, month, 1)
-    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
-
-    in_cluster_articles = []
-    not_in_cluster_articles = []
-    not_in_cluster_but_next_day_cluster = []
-
-    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
-    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    stats = pool.starmap(get_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
-                                                   for curr_date in date_range])
-    pool.close()
-
-    for stat in stats:
-        in_cluster_articles += stat[0]
-        not_in_cluster_articles += stat[1]
-        not_in_cluster_but_next_day_cluster += stat[2]
-
-    return in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster
-
-
-def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, within_source=False,
+def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
                                                threshold=0.3):
     """
     A wrapper function to return the bigrams present in the news articles for the given year and month for different
     clusters.
     Parameters
     ----------
-    within_source
+    bias_type:
     db_path: (string) path to the articles database
     dct: (gensim dictionary object)
     tfidf_model: (gensim tfidf model)
@@ -266,11 +94,10 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     """
     conn = db.ArticlesDb(db_path)
     n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
-    if within_source:
-        within_source_tomorrow_cluster, within_source_in_cluster = get_within_source_cluster_of_articles(db_path, dct,
-                                                                                                         tfidf_model,
-                                                                                                         year, month,
-                                                                                                         threshold)
+    if bias_type == 'within_source':
+        within_source_tomorrow_cluster, within_source_in_cluster = \
+            cluster_analysis.get_within_source_cluster_of_articles(db_path, dct, tfidf_model, year, month, threshold)
+
         bigrams_within_source_tomorrow_cluster = {}
         bigrams_within_source_in_cluster = {}
 
@@ -284,10 +111,23 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
             bigrams_within_source_in_cluster[source] = bigrams.get_bigrams_in_articles(articles, group_by, pbar=False)
 
         return bigrams_within_source_tomorrow_cluster, bigrams_within_source_in_cluster
+    elif bias_type == 'median_group':
+        above_median, below_median = cluster_analysis.get_tomorrows_cluster_of_articles_group_by_median(db_path, dct,
+                                                                                                        tfidf_model,
+                                                                                                        year, month,
+                                                                                                        threshold)
+
+        print('calculating bigrams_below median')
+        bigrams_below_median = bigrams.get_bigrams_in_articles(below_median, group_by)
+        print('calculating bigrams above median')
+        bigrams_above_median = bigrams.get_bigrams_in_articles(above_median, group_by)
+
+        return bigrams_above_median, bigrams_below_median
     else:
-        in_cluster, not_in_cluster, in_cluster_tomorrow = get_cluster_of_articles(db_path, dct, tfidf_model,
-                                                                                  year, month,
-                                                                                  threshold)
+        in_cluster, not_in_cluster, in_cluster_tomorrow = cluster_analysis.get_cluster_of_articles(db_path, dct,
+                                                                                                   tfidf_model,
+                                                                                                   year, month,
+                                                                                                   threshold)
 
         all_articles = in_cluster + not_in_cluster
 
@@ -434,7 +274,7 @@ def calculate_bias_group_by_source(aggregate_shares, top1000_bigram):
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluster, in_tomorrow_cluster):
+def _combine_bias_result_for_all_cluster(columns, *args):
     """
     Parameters
     ----------
@@ -448,24 +288,21 @@ def _combine_bias_result_for_all_cluster(all_articles, in_cluster, not_in_cluste
     a pandas dataframe with bias for different cluster combined
     """
 
-    columns = ['source', 'all_articles', 'in_cluster', 'not_in_cluster', 'in_tomorrows_cluster']
-    sources = (list(all_articles.keys()) + list(in_cluster.keys()) + list(not_in_cluster.keys()) +
-               list(in_tomorrow_cluster.keys()))
-
-    sources = list(set(sources))
+    assert ('source' in columns)
+    assert (len(columns) == (len(args) + 1))
     rows = []
-    for source in sources:
-        bias_all_articles = all_articles[source] if source in all_articles else 0
-        bias_in_cluster = in_cluster[source] if source in in_cluster else 0
-        bias_not_in_cluster = not_in_cluster[source] if source in not_in_cluster else 0
-        bias_in_tomorrow_cluster = in_tomorrow_cluster[source] if source in in_tomorrow_cluster else 0
 
-        rows += [[source, bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_tomorrow_cluster]]
+    for source in helpers.sources:
+        row = [source]
+        for cluster in args:
+            bias_for_cluster = cluster[source] if source in cluster else 0
+            row += [bias_for_cluster]
+        rows += [row]
 
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, within_source=False,
+def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, bias_type,
                              threshold=0.3):
     """
     Parameters
@@ -484,9 +321,9 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     """
     top_bigrams = top1000_bigram['bigram'].tolist()
 
-    if within_source:
+    if bias_type == 'within_source':
         bigrams_within_source_tomorrow, bigrams_within_source_in_cluster = \
-            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, within_source,
+            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
                                                        threshold)
         bigrams.convert_bigrams_to_shares_grouped_by_source(bigrams_within_source_tomorrow)
         bigrams.convert_bigrams_to_shares_grouped_by_source(bigrams_within_source_in_cluster)
@@ -510,6 +347,37 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         print('calculate bias for within source in cluster')
         bias_within_source = calculate_bias_group_by_source(top_bigrams_freq_within_source_in_cluster, top1000_bigram)
         bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}.csv'.format(year, month))
+    elif bias_type == 'median_group':
+        bigrams_above_median, bigrams_below_median = get_bigrams_for_year_and_month_by_clusters(db_path, dct,
+                                                                                                tfidf_model, year,
+                                                                                                month, group_by,
+                                                                                                bias_type,
+                                                                                                threshold=threshold)
+
+        print('converting bigrams list to fractional count')
+        bigrams.convert_bigrams_to_shares(bigrams_above_median)
+        bigrams.convert_bigrams_to_shares(bigrams_below_median)
+
+        print('get top bigrams share for all articles')
+        top_bigrams_freq_above_median = get_shares_of_top1000_bigrams(top_bigrams, bigrams_above_median)
+        print('get top bigrams share for in cluster')
+        top_bigrams_freq_below_median = get_shares_of_top1000_bigrams(top_bigrams, bigrams_below_median)
+
+        del bigrams_above_median, bigrams_below_median
+
+        print('standardizing bigram count for all articles')
+        top_bigrams_freq_above_median = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median)
+        print('standardizing bigram count in cluster')
+        top_bigrams_freq_below_median = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median)
+
+        print('calculating bias of news source by cluster groups')
+        bias_above_median, bias_below_median = parmap.map(calculate_bias,
+                                                          [top_bigrams_freq_above_median,
+                                                           top_bigrams_freq_below_median], top1000_bigram, pm_pbar=True)
+
+        columns = ['source', 'bias_for_above_median_tomorrow', 'bias_for_below_median_tomorrow']
+        combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_above_median, bias_below_median)
+        combined_bias_df.to_csv(path_or_buf='../results/bias_{}_{}_{}.csv'.format(year, month, group_by))
     else:
         bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
             get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by,
@@ -547,8 +415,9 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
             [top_bigrams_freq_all_articles, top_bigrams_freq_in_cluster, top_bigrams_freq_not_in_cluster,
              top_bigrams_freq_in_cluster_tomorrow], top1000_bigram, pm_pbar=True)
 
-        combined_bias_df = _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
-                                                                bias_in_cluster_tomorrow)
+        columns = ['source', 'bias_all_articles', 'bias_in_cluster', 'bias_not_in_cluster', 'bias_in_cluster_tomorrow']
+        combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_all_articles, bias_in_cluster,
+                                                                bias_not_in_cluster, bias_in_cluster_tomorrow)
         combined_bias_df.to_csv(path_or_buf='../results/bias_{}_{}_{}.csv'.format(year, month, group_by))
 
 
@@ -685,7 +554,7 @@ def aggregate_bigrams_month_share_group_by_source(top_bigrams_month_share, total
     return aggregate_bigrams_share
 
 
-def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, within_source=False,
+def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, bias_type,
                             threshold=0.3):
     """
     Parameters
@@ -705,7 +574,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     assert (1 > threshold > 0)
     top_bigrams = top1000_bigram['bigram'].tolist()
 
-    if within_source:
+    if bias_type == 'within_source':
         top_bigrams_share_by_month_within_source_tomorrow = []
         total_bigrams_by_month_within_source_tomorrow = []
         top_bigrams_share_by_month_within_source_in_cluster = []
@@ -763,6 +632,8 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         print('calculating bias within source in cluster')
         bias_within_source = calculate_bias_group_by_source(aggregate_share_within_source_in_cluster, top1000_bigram)
         bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}.csv'.format(year))
+    elif bias_type == 'median_groups':
+        pass
     else:
         top_bigrams_share_by_month_in_cluster = []
         total_bigrams_by_month_in_cluster = []
@@ -860,8 +731,9 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
                 aggregate_share_in_cluster_tomorrow],
             top1000_bigram)
 
-        combined_bias_df = _combine_bias_result_for_all_cluster(bias_all_articles, bias_in_cluster, bias_not_in_cluster,
-                                                                bias_in_cluster_tomorrow)
+        columns = ['source', 'bias_all_articles', 'bias_in_cluster', 'bias_not_in_cluster', 'bias_in_cluster_tomorrow']
+        combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_all_articles, bias_in_cluster,
+                                                                bias_not_in_cluster, bias_in_cluster_tomorrow)
         combined_bias_df.to_csv(path_or_buf='../results/bias_{}_{}.csv'.format(year, group_by))
 
 
@@ -880,14 +752,14 @@ def main():
     top1000_bigrams_path = args.parliament_bigrams
     top_1000_bigrams = pd.read_csv(top1000_bigrams_path)
     group_by = args.group_by
-    within_source = args.within_source
+    bias_type = args.bias_type
 
     if month is None:
-        bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, within_source,
+        bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, bias_type,
                                 threshold=threshold)
     else:
-        bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by,
-                                 within_source, threshold=threshold)
+        bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by, bias_type,
+                                 threshold=threshold)
 
 
 if __name__ == '__main__':

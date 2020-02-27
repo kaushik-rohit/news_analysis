@@ -5,7 +5,6 @@ import multiprocessing as mp
 import argparse
 import numpy as np
 import calendar
-from collections import Counter
 import pandas as pd
 import db
 from models import *
@@ -57,6 +56,10 @@ parser.add_argument('--diff-source-tomorrow-cluster',
                     default=True,
                     help='if True consider only articles from different source to be in cluster from next date')
 
+parser.add_argument('-cm', '--cluster-median',
+                    action='store_true',
+                    help='')
+
 
 def get_pos_of_same_source_news(corpus1, corpus2=None):
     """
@@ -92,39 +95,6 @@ def get_pos_of_same_source_news(corpus1, corpus2=None):
         same_source_indices += [same_source_index_for_doci]
 
     return np.array(same_source_indices)
-
-
-def get_similar_articles_by_source_count(articles1, articles2, index_mapping):
-    """
-    It returns a dictionary with stats for articles and the other news sources that
-    reported this news article.
-    Parameters
-    ----------
-    @articles1: A list of Article objects
-    @articles2: A list of Article objects
-    @index_mapping: A list of tuple, which maps articles from articles_day1 to articles in articles_day2
-    based on the cosine similarity metric
-    Returns
-    -------
-    A dictionary, with keys as sources and value as count dictionary
-    """
-    ret = {}
-
-    for idx, similar_articles_idx in index_mapping:
-        source = articles1[idx].source
-        for index in similar_articles_idx:
-            similar_article_source = articles2[index].source
-            if source not in ret:
-                ret[source] = Counter()
-
-            mapping_for_source = ret[source]
-
-            if similar_article_source not in mapping_for_source:
-                mapping_for_source[similar_article_source] = 1
-            else:
-                mapping_for_source[similar_article_source] += 1
-
-    return ret
 
 
 def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, diff_source=True):
@@ -297,6 +267,348 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_so
     return indices
 
 
+def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
+    """
+    Parameters
+    ----------
+    path: (string) path to articles database
+    dct: (gensim dictionary)
+    tfidf_model: (gensim tfidf model)
+    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
+    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    clustered_articles: the list of articles for curr_date which are in cluster with other articles
+    unclustered_articles: the list of articles for curr_date which are not in cluster with any other article
+    unclustered_articles_in_day2_cluster: list of articles for curr_date which are not in cluster with any other article
+    from same date but are in cluster with articles from next day
+    """
+
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    conn = db.ArticlesDb(path)
+
+    print('calculating within source clusters for {}'.format(curr_date))
+    within_source_tomorrow_cluster = {source: [] for source in helpers.source_names}
+    within_source_in_cluster = {source: [] for source in helpers.source_names}
+
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+
+    for idx, indices in unclustered_articles_indices_in_day2_cluster:
+        source = unclustered_articles[idx].source
+        articles = [articles_day2[i] for i in indices]
+        within_source_tomorrow_cluster[source] += articles
+
+    within_source_in_cluster_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+
+    for idx, indices in within_source_in_cluster_indices:
+        source = articles_day1[idx].source
+        articles = [articles_day1[i] for i in indices if i != idx]
+        within_source_in_cluster[source] += articles
+
+    return within_source_tomorrow_cluster, within_source_in_cluster
+
+
+def get_within_source_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
+    """
+    Calculate different clusters of news articles for a given month and return the list of articles which are in
+    cluster, which are not in cluster with any other article or articles which are not in cluster with any other
+    article from the same day but in cluster with articles from next day.
+
+    The method makes use of parallel processing and the 4 groups or clusters are calculated in parallel for each day and
+    later combined to form lists for entire month.
+    Parameters
+    ----------
+    @path: (string) path to location of articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: gensim tfidf model
+    @year: (int)
+    @month: (int)
+    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
+    """
+
+    assert (1 > threshold > 0)
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+
+    within_source_tomorrow_cluster = {source: [] for source in helpers.source_names}
+    within_source_in_cluster = {source: [] for source in helpers.source_names}
+
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    stats = pool.starmap(get_within_source_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
+                                                                 for curr_date in date_range])
+    pool.close()
+
+    for stat in stats:
+        within_source_tomorrow_cluster = helpers.combine_dct(within_source_tomorrow_cluster, stat[0])
+        within_source_in_cluster = helpers.combine_dct(within_source_in_cluster, stat[1])
+
+    return within_source_tomorrow_cluster, within_source_in_cluster
+
+
+def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
+    """
+    Parameters
+    ----------
+    path: (string) path to articles database
+    dct: (gensim dictionary)
+    tfidf_model: (gensim tfidf model)
+    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
+    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    clustered_articles: the list of articles for curr_date which are in cluster with other articles
+    unclustered_articles: the list of articles for curr_date which are not in cluster with any other article
+    unclustered_articles_in_day2_cluster: list of articles for curr_date which are not in cluster with any other article
+    from same date but are in cluster with articles from next day
+    """
+
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    conn = db.ArticlesDb(path)
+
+    print('calculating clusters for {}'.format(curr_date))
+
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    clustered_articles = [articles_day1[i] for i in range(len(articles_day1)) if i not in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+
+    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
+                                            unclustered_articles_indices_in_day2_cluster]
+
+    return clustered_articles, unclustered_articles, unclustered_articles_in_day2_cluster
+
+
+def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
+    """
+    Calculate different clusters of news articles for a given month and return the list of articles which are in
+    cluster, which are not in cluster with any other article or articles which are not in cluster with any other
+    article from the same day but in cluster with articles from next day.
+
+    The method makes use of parallel processing and the 4 groups or clusters are calculated in parallel for each day and
+    later combined to form lists for entire month.
+    Parameters
+    ----------
+    @path: (string) path to location of articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: gensim tfidf model
+    @year: (int)
+    @month: (int)
+    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
+    """
+
+    assert (1 > threshold > 0)
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+
+    in_cluster_articles = []
+    not_in_cluster_articles = []
+    not_in_cluster_but_next_day_cluster = []
+
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    stats = pool.starmap(get_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
+                                                   for curr_date in date_range])
+    pool.close()
+
+    for stat in stats:
+        in_cluster_articles += stat[0]
+        not_in_cluster_articles += stat[1]
+        not_in_cluster_but_next_day_cluster += stat[2]
+
+    return in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster
+
+
+def get_tomorrows_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf_model, threshold):
+    """
+    Parameters
+    ----------
+    path: (string) path to articles database
+    dct: (gensim dictionary)
+    tfidf_model: (gensim tfidf model)
+    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
+    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    """
+
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    conn = db.ArticlesDb(path)
+
+    print('calculating clusters for {}'.format(curr_date))
+
+    median_length = 1
+    articles_in_tomorrows_cluster_above_median = []
+    articles_in_tomorrows_cluster_below_median = []
+
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+
+    for i, indices in unclustered_articles_indices_in_day2_cluster:
+        if len(indices) < median_length:
+            articles_in_tomorrows_cluster_below_median.append(unclustered_articles[i])
+        else:
+            articles_in_tomorrows_cluster_above_median.append(unclustered_articles[i])
+
+    return articles_in_tomorrows_cluster_above_median, articles_in_tomorrows_cluster_below_median
+
+
+def get_tomorrows_cluster_of_articles_group_by_median(path, dct, tfidf_model, year, month, threshold):
+    """
+    Parameters
+    ----------
+    @path: (string) path to location of articles database
+    @dct: (gensim dictionary object)
+    @tfidf_model: gensim tfidf model
+    @year: (int)
+    @month: (int)
+    @threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    3 different list of articles, in_cluster, not_in_cluster, not_in_cluster_but_tomorrow's cluster
+    """
+
+    assert (1 > threshold > 0)
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+
+    above_median = []
+    below_median = []
+
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    stats = pool.starmap(get_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
+                                                   for curr_date in date_range])
+    pool.close()
+
+    for stat in stats:
+        above_median += stat[0]
+        below_median += stat[1]
+
+    return above_median, below_median
+
+
+def get_clusters_and_size_for_day(curr_date, path, dct, tfidf_model, threshold=0.3):
+    """
+    Parameters
+    ----------
+    path: (string) path to articles database
+    dct: (gensim dictionary)
+    tfidf_model: (gensim tfidf model)
+    curr_date: (python datetime object) the date for which clusters of articles is to be calculated
+    threshold: (float) the cosine similarity threshold which is used to classify articles into same cluster
+
+    Returns
+    -------
+    clustered_sizes:
+    """
+
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    conn = db.ArticlesDb(path)
+
+    print('calculating clusters for {}'.format(curr_date))
+
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+
+    cluster_sizes = [len(idx) + 1 for i, idx in unclustered_articles_indices_in_day2_cluster]
+    return cluster_sizes
+
+
+def get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, agg_later=False, threshold=0.3):
+    """Fetches the cluster and it's average size
+
+    Parameters
+    ----------
+    @path: string, location to sqlite database
+    @dct: gensim Dictionary object, bag of word model
+    @tfidf_model: gensim tfidf model, pretrained
+    @year: int, year of the month for which analysis is to be done
+    @threshold (optional): float, similarity threshold
+
+    Returns
+    -------
+    A panda Dataframe instance
+    """
+    assert (1 > threshold > 0)
+    start_date = date(year, month, 1)
+    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+
+    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+    print('calculating clusters sizes for {} {}'.format(year, calendar.month_name[month]))
+
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+    stats = pool.starmap(get_clusters_and_size_for_day, [(curr_date, path, dct, tfidf_model, threshold)
+                                                         for curr_date in date_range])
+    pool.close()
+
+    if agg_later:
+        number_of_clusters = [len(stat) for stat in stats]
+        all_cluster_sizes = []
+        for stat in stats:
+            all_cluster_sizes += stat
+
+        return calendar.month_name[month], int(np.mean(number_of_clusters)), np.median(all_cluster_sizes)
+
+    rows = []
+    for i in range(len(date_range)):
+        rows += [[date_range[i], len(stats[i]), np.median(stats[i])]]
+
+    clusters_median = pd.DataFrame(rows, columns=['Date', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/cluster_sizes_{}_{}.csv'.format(year, month))
+
+
+def get_clusters_and_median_size_for_year(path, dct, tfidf_model, year, threshold=0.3):
+    assert (1 > threshold > 0)
+    rows = []
+    for month in range(1, 12 + 1):
+        rows += [get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, agg_later=True,
+                                                        threshold=threshold)]
+        print(rows[month-1])
+
+    clusters = pd.DataFrame(rows, columns=['month', 'number of cluster', 'size of cluster'])
+    clusters.to_csv(path_or_buf='../results/cluster_sizes_{}.csv'.format(year))
+
+
 def _add_percentages_to_result(stats):
     """
     The function takes in a pandas dataframe that contains cluster statistics and adds columns with
@@ -379,8 +691,6 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=False, thr
                                               for curr_date in date_range])
     pool.close()
     stats = list(zip(*stats))
-    source_counts = stats[1]
-    source_counts = helpers.combine_dictionaries(source_counts)
     stats = pd.concat(stats[0])
 
     # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
@@ -396,7 +706,7 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=False, thr
     _add_percentages_to_result(stats_by_date)
     _add_percentages_to_result(stats_by_source)
 
-    return stats_by_source, stats_by_date, source_counts
+    return stats_by_source, stats_by_date
 
 
 def initialize_results(counts):
@@ -416,7 +726,7 @@ def initialize_results(counts):
     return results
 
 
-def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
+def get_stats_for_date(path, dct, tfidf_model, curr_date, threshold=0.3):
     """
     Parameters
     ----------
@@ -434,8 +744,6 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
     print('Calculating stats for the day: {}'.format(curr_date))
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    dct = corpora.Dictionary.load(dct_path)
-    tfidf_model = models.TfidfModel.load(model_path)
     conn = db.ArticlesDb(path)
 
     articles_day1 = list(conn.select_articles_by_date(curr_date))
@@ -451,8 +759,6 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
                                                                         tfidf_model, threshold=threshold)
     unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
                                             unclustered_articles_indices_in_day2_cluster]
-    sim_articles_group = get_similar_articles_by_source_count(unclustered_articles, articles_day2,
-                                                              unclustered_articles_indices_in_day2_cluster)
 
     assert (unclustered_articles is not None and unclustered_articles_in_day2_cluster is not None)
 
@@ -477,28 +783,35 @@ def get_stats_for_date(path, dct_path, model_path, curr_date, threshold=0.3):
 
     ret = pd.DataFrame(df_rows, columns=['source', 'date', 'total_articles', 'unclustered_articles',
                                          'unclustered_articles_in_next_day_cluster'])
-    return ret, sim_articles_group
+    return ret
 
 
 def main():
     args = parser.parse_args()
 
-    dct = args.dictionary
-    tfidf_model = args.tfidf_model
+    dct = corpora.Dictionary.load(args.dictionary)
+    tfidf_model = models.TfidfModel.load(args.tfidf_model)
     year = args.year
     month = args.month
     threshold = args.threshold
     db_path = args.db_path
+    cluster_median = args.cluster_median
 
-    if month is None:
-        df1, df2 = aggregate_by_year(db_path, dct, tfidf_model, year, threshold=threshold)
-        df1.to_csv(path_or_buf='../results/{}_source.csv'.format(year))
-        df2.to_csv(path_or_buf='../results/{}_date.csv'.format(year))
+    if cluster_median:
+        if month is None:
+            get_clusters_and_median_size_for_year(db_path, dct, tfidf_model, year, threshold=0.3)
+        else:
+            get_clusters_and_median_size_for_month(db_path, dct, tfidf_model, year, month, agg_later=False,
+                                                   threshold=0.3)
     else:
-        df1, df2, source_stat = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
-        df1.to_csv(path_or_buf='../results/{}_{}_source.csv'.format(year, month))
-        df2.to_csv(path_or_buf='../results/{}_{}_date.csv'.format(year, month))
-        helpers.save(source_stat, 'source_stat_{}_{}'.format(year, month))
+        if month is None:
+            df1, df2 = aggregate_by_year(db_path, dct, tfidf_model, year, threshold=threshold)
+            df1.to_csv(path_or_buf='../results/{}_source.csv'.format(year))
+            df2.to_csv(path_or_buf='../results/{}_date.csv'.format(year))
+        else:
+            df1, df2 = aggregate_by_month(db_path, dct, tfidf_model, year, month, threshold=threshold)
+            df1.to_csv(path_or_buf='../results/{}_{}_source.csv'.format(year, month))
+            df2.to_csv(path_or_buf='../results/{}_{}_date.csv'.format(year, month))
 
 
 if __name__ == '__main__':
