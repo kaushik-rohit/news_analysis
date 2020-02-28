@@ -461,7 +461,7 @@ def get_tomorrows_cluster_of_articles_group_by_median_for_date(curr_date, path, 
     next_date = curr_date + delta
     conn = db.ArticlesDb(path)
 
-    print('calculating clusters for {}'.format(curr_date))
+    print('calculating median clusters for {}'.format(curr_date))
 
     median_length = 1
     articles_in_tomorrows_cluster_above_median = []
@@ -476,7 +476,7 @@ def get_tomorrows_cluster_of_articles_group_by_median_for_date(curr_date, path, 
                                                                         tfidf_model, threshold=threshold)
 
     for i, indices in unclustered_articles_indices_in_day2_cluster:
-        if len(indices) < median_length:
+        if len(indices) <= median_length:
             articles_in_tomorrows_cluster_below_median.append(unclustered_articles[i])
         else:
             articles_in_tomorrows_cluster_above_median.append(unclustered_articles[i])
@@ -508,10 +508,10 @@ def get_tomorrows_cluster_of_articles_group_by_median(path, dct, tfidf_model, ye
     below_median = []
 
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-    print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
+    print('calculating median clusters for {} {}'.format(year, calendar.month_name[month]))
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    stats = pool.starmap(get_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
-                                                   for curr_date in date_range])
+    stats = pool.starmap(get_tomorrows_cluster_of_articles_group_by_median_for_date,
+                         [(curr_date, path, dct, tfidf_model, threshold) for curr_date in date_range])
     pool.close()
 
     for stat in stats:

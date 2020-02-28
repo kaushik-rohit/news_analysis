@@ -58,10 +58,6 @@ parser.add_argument('-g', '--group-by',
                     help='whether bias is categorized by source id or source name. Multiple source id can have same'
                          'name because online and print version have different id')
 
-parser.add_argument('-w', '--within-source',
-                    action='store_true',
-                    help='If true bias between source to source reporting would be calculated')
-
 parser.add_argument('-bt', '--bias-type',
                     type=str,
                     choices=['general', 'within_cluster', 'median_groups'],
@@ -94,6 +90,7 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     """
     conn = db.ArticlesDb(db_path)
     n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
+
     if bias_type == 'within_source':
         within_source_tomorrow_cluster, within_source_in_cluster = \
             cluster_analysis.get_within_source_cluster_of_articles(db_path, dct, tfidf_model, year, month, threshold)
@@ -111,7 +108,7 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
             bigrams_within_source_in_cluster[source] = bigrams.get_bigrams_in_articles(articles, group_by, pbar=False)
 
         return bigrams_within_source_tomorrow_cluster, bigrams_within_source_in_cluster
-    elif bias_type == 'median_group':
+    elif bias_type == 'median_groups':
         above_median, below_median = cluster_analysis.get_tomorrows_cluster_of_articles_group_by_median(db_path, dct,
                                                                                                         tfidf_model,
                                                                                                         year, month,
@@ -292,7 +289,7 @@ def _combine_bias_result_for_all_cluster(columns, *args):
     assert (len(columns) == (len(args) + 1))
     rows = []
 
-    for source in helpers.sources:
+    for source in helpers.source_names:
         row = [source]
         for cluster in args:
             bias_for_cluster = cluster[source] if source in cluster else 0
@@ -347,7 +344,7 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         print('calculate bias for within source in cluster')
         bias_within_source = calculate_bias_group_by_source(top_bigrams_freq_within_source_in_cluster, top1000_bigram)
         bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}.csv'.format(year, month))
-    elif bias_type == 'median_group':
+    elif bias_type == 'median_groups':
         bigrams_above_median, bigrams_below_median = get_bigrams_for_year_and_month_by_clusters(db_path, dct,
                                                                                                 tfidf_model, year,
                                                                                                 month, group_by,
@@ -358,16 +355,16 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         bigrams.convert_bigrams_to_shares(bigrams_above_median)
         bigrams.convert_bigrams_to_shares(bigrams_below_median)
 
-        print('get top bigrams share for all articles')
+        print('get top bigrams share for above median articles')
         top_bigrams_freq_above_median = get_shares_of_top1000_bigrams(top_bigrams, bigrams_above_median)
-        print('get top bigrams share for in cluster')
+        print('get top bigrams share for below median articles')
         top_bigrams_freq_below_median = get_shares_of_top1000_bigrams(top_bigrams, bigrams_below_median)
 
         del bigrams_above_median, bigrams_below_median
 
-        print('standardizing bigram count for all articles')
+        print('standardizing bigram count for above median articles')
         top_bigrams_freq_above_median = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median)
-        print('standardizing bigram count in cluster')
+        print('standardizing bigram count for below median articles')
         top_bigrams_freq_below_median = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median)
 
         print('calculating bias of news source by cluster groups')
@@ -377,10 +374,10 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
         columns = ['source', 'bias_for_above_median_tomorrow', 'bias_for_below_median_tomorrow']
         combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_above_median, bias_below_median)
-        combined_bias_df.to_csv(path_or_buf='../results/bias_{}_{}_{}.csv'.format(year, month, group_by))
+        combined_bias_df.to_csv(path_or_buf='../results/bias_median_{}_{}_{}.csv'.format(year, month, group_by))
     else:
         bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
-            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by,
+            get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
                                                        threshold=threshold)
 
         print('converting bigrams list to fractional count')
