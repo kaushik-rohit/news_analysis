@@ -54,7 +54,7 @@ def save(obj, name):
 
 
 def save_json(obj, name):
-    with open(name, 'wb') as f:
+    with open(name, 'w') as f:
         json.dump(obj, f)
 
 
