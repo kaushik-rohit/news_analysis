@@ -595,7 +595,8 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         total_bigrams_by_month_within_source_in_cluster = []
         for month in range(1, 12 + 1):
             bigrams_within_source_tomorrow, bigrams_within_source_in_cluster = \
-                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
+                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
+                                                           threshold)
 
             total_bigrams_within_source_tomorrow = bigrams.convert_bigrams_to_shares_grouped_by_source(
                 bigrams_within_source_tomorrow)
@@ -722,7 +723,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
         # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
         for month in range(1, 12 + 1):
             bigrams_in_cluster, bigrams_not_in_cluster, bigrams_in_cluster_tomorrow, bigrams_all_articles = \
-                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by,
+                get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
                                                            threshold=threshold)
 
             # convert bigrams list to bigrams shares
