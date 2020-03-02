@@ -97,6 +97,27 @@ def get_pos_of_same_source_news(corpus1, corpus2=None):
     return np.array(same_source_indices)
 
 
+def check_not_subset(indices1, indices2):
+    """
+    Check whether indices1 is subset of indices2, i.e there is atleast one element in indices1 that is not present
+    in indices2
+    Parameters
+    ----------
+    indices1: list of int
+    indices2: list of int
+
+    Returns
+    -------
+    True if atleast one element from indices1 is not part of indices2
+    else False
+    """
+    for index in indices1:
+        if index not in indices2:
+            return True
+
+    return False
+
+
 def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, diff_source=True):
     """
     The method returns all the articles from articles1 which have atleast one
@@ -136,8 +157,7 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
 
     for idx, similarities in enumerate(index[articles1_vec]):
         # check that there is atleast one element such that similarity of ith article
-        # is more than 0.3, if so ith article is in cluster with atleast one article
-        # from articles2
+        # is more than 0.3, if so ith article is in cluster with atleast one article from articles2
         similarities = np.array(similarities)
         indices_where_similarity_greater_than_threshold = np.argwhere(similarities > threshold).flatten()
 
@@ -145,17 +165,15 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
         if indices_where_similarity_greater_than_threshold.size == 0:
             continue
 
-        # if diff_source is true, then similar articles should have atleast one article from another source that it is
-        # is similar to.
+        # if diff_source is true, check that alteast one similar article is of different source
         if diff_source and len(indices_of_same_source[idx]) != 0:
             indices_of_same_source_i = indices_of_same_source[idx]
 
             assert (len(similarities) >= len(indices_of_same_source_i))
             assert (len(similarities) > max(indices_of_same_source_i))
 
-            # check if indices_where_similarity is same as indices with same source, if true this would mean that
-            # there are no article of different source that the article at idx is similar to, so move on to next article
-            if set(indices_where_similarity_greater_than_threshold) == set(indices_of_same_source_i):
+            # check if atleast one similar article is from different source
+            if not check_not_subset(indices_where_similarity_greater_than_threshold, indices_of_same_source_i):
                 continue
 
         similar_articles += [(idx, list(indices_where_similarity_greater_than_threshold))]
@@ -196,6 +214,10 @@ def get_articles_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source
         similarities[idx] = 0  # mask similarity with itself
         indices_where_similarity_greater_than_threshold = np.argwhere(similarities > threshold).flatten()
 
+        # if similarity with no article is greater than 0, continue to next article
+        if indices_where_similarity_greater_than_threshold.size == 0:
+            continue
+
         # mask all the similarities where articles have some source
         # since we only want to know unclustered articles forming cluster
         # from next day articles but different source
@@ -205,9 +227,8 @@ def get_articles_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source
             assert (len(similarities) >= len(indices_of_same_source_i))
             assert (len(similarities) > max(indices_of_same_source_i))
 
-            # check if indices_where_similarity is same as indices with same source, if true this would mean that
-            # there are no article of different source that the article at idx is similar to, so move on to next article
-            if set(indices_where_similarity_greater_than_threshold) == set(indices_of_same_source_i):
+            # check if atleast one similar article is from different source
+            if not check_not_subset(indices_where_similarity_greater_than_threshold, indices_of_same_source_i):
                 continue
 
         in_cluster += [(idx, list(indices_where_similarity_greater_than_threshold))]
