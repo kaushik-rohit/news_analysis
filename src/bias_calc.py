@@ -60,7 +60,7 @@ parser.add_argument('-g', '--group-by',
 
 parser.add_argument('-bt', '--bias-type',
                     type=str,
-                    choices=['general', 'within_cluster', 'median_groups'],
+                    choices=['general', 'within_source', 'median_groups'],
                     default='general',
                     help='')
 
@@ -239,10 +239,9 @@ def calculate_bias(top1000_bigrams_freq_by_source, top1000bigrams):
             alpha = top1000bigrams[top1000bigrams['bigram'] == top_bigrams[i]].iloc[0]['alpha']
             beta = top1000bigrams[top1000bigrams['bigram'] == top_bigrams[i]].iloc[0]['beta']
             bigram_share = row[top_bigrams[i]]
-
             assert (isinstance(alpha, float))
             assert (isinstance(beta, float))
-            assert (isinstance(bigram_share, float))
+            # assert (isinstance(bigram_share, float))
 
             # print('alpha: {}, beta: {}'.format(alpha, beta))
             num += beta * (bigram_share - alpha)
@@ -381,10 +380,10 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
                                                        threshold=threshold)
 
         print('converting bigrams list to fractional count')
-        bigrams.convert_bigrams_to_shares(bigrams_all_articles)
-        bigrams.convert_bigrams_to_shares(bigrams_in_cluster)
-        bigrams.convert_bigrams_to_shares(bigrams_not_in_cluster)
-        bigrams.convert_bigrams_to_shares(bigrams_in_cluster_tomorrow)
+        total_bigrams_all_articles = bigrams.convert_bigrams_to_shares(bigrams_all_articles)
+        total_bigrams_in_cluster = bigrams.convert_bigrams_to_shares(bigrams_in_cluster)
+        total_bigrams_not_in_cluster = bigrams.convert_bigrams_to_shares(bigrams_not_in_cluster)
+        total_bigrams_in_cluster_tomorrow = bigrams.convert_bigrams_to_shares(bigrams_in_cluster_tomorrow)
 
         print('get top bigrams share for all articles')
         top_bigrams_freq_all_articles = get_shares_of_top1000_bigrams(top_bigrams, bigrams_all_articles)
@@ -396,6 +395,24 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         top_bigrams_freq_in_cluster_tomorrow = get_shares_of_top1000_bigrams(top_bigrams, bigrams_in_cluster_tomorrow)
 
         del bigrams_in_cluster, bigrams_in_cluster_tomorrow, bigrams_not_in_cluster, bigrams_all_articles
+
+        top_bigrams_freq_all_articles.to_csv(path_or_buf='../results/bigrams_share_all_articles_{}_{}.csv'.format(
+            year, month))
+        top_bigrams_freq_in_cluster.to_csv(path_or_buf='../results/bigrams_share_in_cluster_{}_{}.csv'.format(
+            year, month))
+        top_bigrams_freq_not_in_cluster.to_csv(path_or_buf='../results/bigrams_share_not_in_cluster_{}_{}.csv'.format(
+            year, month))
+        top_bigrams_freq_in_cluster_tomorrow.to_csv(
+            path_or_buf='../results/bigrams_share_in_cluster_tomorrow_{}_{}.csv'.format(year, month))
+
+        helpers.save_json(total_bigrams_all_articles, '../results/total_bigrams_all_articles_{}_{}.json'.format(year,
+                                                                                                                month))
+        helpers.save_json(total_bigrams_in_cluster, '../results/total_bigrams_in_cluster_{}_{}.json'.format(year,
+                                                                                                            month))
+        helpers.save_json(total_bigrams_not_in_cluster, '../results/total_bigrams_not_in_cluster_{}_{}.json'.format(
+            year, month))
+        helpers.save_json(total_bigrams_in_cluster_tomorrow, '../results/total_bigrams_in_cluster_tomorrow_{}_{}.json'.
+                          format(year, month))
 
         print('standardizing bigram count for all articles')
         top_bigrams_freq_all_articles = bigrams.standardize_bigrams_count(top_bigrams_freq_all_articles)
