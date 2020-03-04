@@ -15,8 +15,6 @@ class TestBiasCalculation(unittest.TestCase):
         bigrams_count_not_in_cluster = helpers.load_json('../tests/data/total_bigrams_not_in_cluster_2015_1.json')
 
         bigrams = shares_all_articles.columns[2:]
-        sources = shares_all_articles['source'].tolist()
-        n_source = len(sources)
 
         for index, row in shares_all_articles.iterrows():
             source = row['source']
@@ -29,7 +27,8 @@ class TestBiasCalculation(unittest.TestCase):
                 count_in_cluster = bigrams_count_in_cluster[source]
                 count_not_in_cluster = bigrams_count_not_in_cluster[source]
                 total_count = count_in_cluster + count_not_in_cluster
-                weighted_share = (share_in_cluster*count_in_cluster + share_not_in_cluster*count_not_in_cluster)/total_count
+                weighted_share = ((share_in_cluster*count_in_cluster +
+                                   share_not_in_cluster*count_not_in_cluster)/total_count)
                 assert(np.isclose(weighted_share, share_in_all_article))
 
 
