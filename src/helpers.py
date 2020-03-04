@@ -58,6 +58,12 @@ def save_json(obj, name):
         json.dump(obj, f)
 
 
+def load_json(name):
+    with open(name) as f:
+        data = json.load(f)
+    return data
+
+
 def parse_date(date):
     date = date.split('\n')[0]
 
