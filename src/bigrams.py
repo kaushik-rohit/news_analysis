@@ -3,6 +3,7 @@ import nltk
 from nltk.stem import PorterStemmer
 from nltk.corpus import stopwords
 from collections import Counter
+import pandas as pd
 import string
 import parmap
 import helpers
@@ -155,6 +156,57 @@ def standardize_bigrams_count(top_bigrams_share_by_source):
     return top_bigrams_share_by_source.fillna(0)  # if z score is nan change it 0
 
 
+def standardize_with_mean_and_std(top_bigrams_share_by_source, mean_and_std):
+    bigram_set = top_bigrams_share_by_source.columns.tolist()[1:]
+
+    assert (len(bigram_set) == 1000)
+
+    for bigram in bigram_set:
+        std = mean_and_std[bigram][1]
+        mean = mean_and_std[bigram][0]
+        top_bigrams_share_by_source[bigram] = (top_bigrams_share_by_source[bigram] - mean) / std
+
+    return top_bigrams_share_by_source.fillna(0)  # if z score is nan change it 0
+
+
+def get_stacked_mean_and_deviation(top_bigrams_share_by_source1, top_bigrams_share_by_source2):
+    mean_std_bigrams = {}
+
+    stacked_bigrams_share = pd.concat([top_bigrams_share_by_source1, top_bigrams_share_by_source2], ignore_index=True)
+
+    bigram_set = stacked_bigrams_share.columns.tolist()[1:]
+
+    assert (len(bigram_set) == 1000)
+
+    for bigram in bigram_set:
+        std = stacked_bigrams_share[bigram].std()
+        mean = stacked_bigrams_share[bigram].mean()
+        mean_std_bigrams[bigram] = (mean, std)
+
+    return mean_std_bigrams
+
+
+def get_mean_and_deviation(top_bigrams_share_by_source):
+    mean_std_bigrams = {}
+
+    bigram_set = top_bigrams_share_by_source.columns.tolist()[1:]
+
+    assert (len(bigram_set) == 1000)
+
+    for bigram in bigram_set:
+        std = top_bigrams_share_by_source[bigram].std()
+        mean = top_bigrams_share_by_source[bigram].mean()
+        mean_std_bigrams[bigram] = (mean, std)
+
+    return mean_std_bigrams
+
+
 def standardize_bigrams_count_group_by_source(top_bigrams_share_by_source):
     for source, bigram in top_bigrams_share_by_source.items():
         top_bigrams_share_by_source[source] = standardize_bigrams_count(top_bigrams_share_by_source[source])
+
+
+def standardize_with_mean_and_std_group_by_source(top_bigrams_share_by_source, mean_and_std):
+    for source, bigram in top_bigrams_share_by_source.items():
+        top_bigrams_share_by_source[source] = standardize_with_mean_and_std(top_bigrams_share_by_source[source],
+                                                                            mean_and_std)
