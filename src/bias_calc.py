@@ -64,6 +64,12 @@ parser.add_argument('-bt', '--bias-type',
                     default='general',
                     help='')
 
+parser.add_argument('-std', '--standardize_type',
+                    type=str,
+                    choices=['stacked', 'all_articles', 'cluster_specific'],
+                    default='cluster_specific',
+                    help='user specific standardization type for bigrams shares in clusters')
+
 
 def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
                                                threshold=0.3):
@@ -90,6 +96,7 @@ def get_bigrams_for_year_and_month_by_clusters(db_path, dct, tfidf_model, year, 
     """
     conn = db.ArticlesDb(db_path)
     n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
+    conn.close()
 
     if bias_type == 'within_source':
         within_source_tomorrow_cluster, within_source_in_cluster = \
@@ -298,7 +305,7 @@ def _combine_bias_result_for_all_cluster(columns, *args):
     return pd.DataFrame(rows, columns=columns).sort_values(by=['source']).reset_index(drop=True)
 
 
-def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, bias_type,
+def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, bias_type, std_type,
                              threshold=0.3):
     """
     Parameters
@@ -309,7 +316,8 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     @top1000_bigram: top 1000 bigrams in MP speeches with alpha and beta bias coefficient
     @month: (int)
     @year: (int)
-    @agg_later: (boolean) whether the bias are aggregated later (in bias_averaged_over_year)
+    @bias_type:
+    @std_type:
     @threshold: (float)
 
     Returns
@@ -331,10 +339,20 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         top_bigrams_freq_within_source_in_cluster = get_shares_of_top1000_bigrams_grouped_by_source(
             top_bigrams, bigrams_within_source_in_cluster)
 
-        print('standardizing bigram count for within source')
-        bigrams.standardize_bigrams_count_group_by_source(top_bigrams_freq_within_source_tomorrow)
-        print('standardizing bigram count for within source in cluster')
-        bigrams.standardize_bigrams_count_group_by_source(top_bigrams_freq_within_source_in_cluster)
+        if std_type == 'cluster_specific':
+            bigrams.standardize_bigrams_count_group_by_source(top_bigrams_freq_within_source_in_cluster)
+            bigrams.standardize_with_mean_and_std_group_by_source(top_bigrams_freq_within_source_tomorrow)
+        else:
+            if std_type == 'all_articles':
+                mean_and_std = helpers.load_json('../data/all_mean_and_std_{}_{}.json'.format(year, month))
+            elif std_type == 'stacked':
+                mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}_{}.json'.format(year, month))
+
+            print('standardizing bigram count for within source')
+            bigrams.standardize_with_mean_and_std_group_by_source(top_bigrams_freq_within_source_tomorrow, mean_and_std)
+            print('standardizing bigram count for within source in cluster')
+            bigrams.standardize_with_mean_and_std_group_by_source(top_bigrams_freq_within_source_in_cluster,
+                                                                  mean_and_std)
 
         print('calculate bias for within source tomorrow cluster')
         bias_within_source = calculate_bias_group_by_source(top_bigrams_freq_within_source_tomorrow, top1000_bigram)
@@ -414,14 +432,37 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
         helpers.save_json(total_bigrams_in_cluster_tomorrow, '../results/total_bigrams_in_cluster_tomorrow_{}_{}.json'.
                           format(year, month))
 
-        print('standardizing bigram count for all articles')
-        top_bigrams_freq_all_articles = bigrams.standardize_bigrams_count(top_bigrams_freq_all_articles)
-        print('standardizing bigram count in cluster')
-        top_bigrams_freq_in_cluster = bigrams.standardize_bigrams_count(top_bigrams_freq_in_cluster)
-        print('standardizing bigram count not_in cluster')
-        top_bigrams_freq_not_in_cluster = bigrams.standardize_bigrams_count(top_bigrams_freq_not_in_cluster)
-        print('standardizing bigram count for in cluster tomorrow')
-        top_bigrams_freq_in_cluster_tomorrow = bigrams.standardize_bigrams_count(top_bigrams_freq_in_cluster_tomorrow)
+        if std_type == 'cluster_specific':
+            print('standardizing bigram count for all articles')
+            top_bigrams_freq_all_articles = bigrams.standardize_with_mean_and_std(top_bigrams_freq_all_articles)
+            print('standardizing bigram count in cluster')
+            top_bigrams_freq_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_in_cluster)
+            print('standardizing bigram count not_in cluster')
+            top_bigrams_freq_not_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_not_in_cluster)
+            print('standardizing bigram count for in cluster tomorrow')
+            top_bigrams_freq_in_cluster_tomorrow = bigrams.standardize_with_mean_and_std(
+                top_bigrams_freq_in_cluster_tomorrow)
+        else:
+            if std_type == 'all_articles':
+                mean_and_std = bigrams.get_mean_and_deviation(top_bigrams_freq_all_articles)
+                helpers.save_json(mean_and_std, '../data/all_mean_and_std_{}_{}.json'.format(year, month))
+            else:
+                mean_and_std = bigrams.get_stacked_mean_and_deviation(top_bigrams_freq_in_cluster,
+                                                                      top_bigrams_freq_not_in_cluster)
+                helpers.save_json(mean_and_std, '../data/stacked_mean_and_std_{}_{}.json'.format(year, month))
+
+            print('standardizing bigram count for all articles')
+            top_bigrams_freq_all_articles = bigrams.standardize_with_mean_and_std(top_bigrams_freq_all_articles,
+                                                                                  mean_and_std)
+            print('standardizing bigram count in cluster')
+            top_bigrams_freq_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_in_cluster,
+                                                                                mean_and_std)
+            print('standardizing bigram count not_in cluster')
+            top_bigrams_freq_not_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_not_in_cluster,
+                                                                                    mean_and_std)
+            print('standardizing bigram count for in cluster tomorrow')
+            top_bigrams_freq_in_cluster_tomorrow = bigrams.standardize_with_mean_and_std(
+                top_bigrams_freq_in_cluster_tomorrow, mean_and_std)
 
         print('calculating bias of news source by cluster groups')
         bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = parmap.map(
@@ -568,7 +609,7 @@ def aggregate_bigrams_month_share_group_by_source(top_bigrams_month_share, total
     return aggregate_bigrams_share
 
 
-def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, bias_type,
+def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, bias_type, std_type,
                             threshold=0.3):
     """
     Parameters
@@ -578,6 +619,8 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     @tfidf_model: (gensim tfidf object)
     @top1000_bigrams: (pandas DataFrame)top 1000 bigrams from MP speeches with alpha and beta bias coefficient
     @year: (int)
+    @bias_type: type of bias, whether within source bias, cluster bias or median bias
+    @std_type: type of standardization to apply to top bigrams share
     @threshold: (float)
 
     Returns
@@ -635,10 +678,21 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
             aggregate_source_count_within_source_in_cluster,
             top_bigrams)
 
-        print('standardizing bigrams count for within source tomorrow')
-        bigrams.standardize_bigrams_count_group_by_source(aggregate_share_within_source_tomorrow)
-        print('standardizing bigrams count for within source in cluster')
-        bigrams.standardize_bigrams_count_group_by_source(aggregate_share_within_source_in_cluster)
+        if std_type == 'cluster_specific':
+            print('standardizing bigrams count for within source tomorrow')
+            bigrams.standardize_bigrams_count_group_by_source(aggregate_share_within_source_tomorrow)
+            print('standardizing bigrams count for within source in cluster')
+            bigrams.standardize_bigrams_count_group_by_source(aggregate_share_within_source_in_cluster)
+        else:
+            if std_type == 'all_articles':
+                mean_and_std = helpers.load_json('../data/all_mean_and_std_{}.json'.format(year))
+            elif std_type == 'stacked':
+                mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}.json'.format(year))
+
+            print('standardizing bigram count for within source')
+            bigrams.standardize_with_mean_and_std_group_by_source(aggregate_share_within_source_tomorrow, mean_and_std)
+            print('standardizing bigram count for within source in cluster')
+            bigrams.standardize_with_mean_and_std_group_by_source(aggregate_share_within_source_in_cluster,mean_and_std)
 
         print('calculating bias within source tomorrow')
         bias_within_source = calculate_bias_group_by_source(aggregate_share_within_source_tomorrow, top1000_bigram)
@@ -788,14 +842,50 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
                                                                      aggregate_source_count_all_articles,
                                                                      top_bigrams)
 
-        print('standardizing bigram count for all articles')
-        aggregate_share_in_cluster = bigrams.standardize_bigrams_count(aggregate_share_in_cluster)
-        print('standardizing bigram count in cluster')
-        aggregate_share_not_in_cluster = bigrams.standardize_bigrams_count(aggregate_share_not_in_cluster)
-        print('standardizing bigram count not_in cluster')
-        aggregate_share_in_cluster_tomorrow = bigrams.standardize_bigrams_count(aggregate_share_in_cluster_tomorrow)
-        print('standardizing bigram count for in cluster tomorrow')
-        aggregate_share_all_articles = bigrams.standardize_bigrams_count(aggregate_share_all_articles)
+        aggregate_share_all_articles.to_csv(path_or_buf='../results/bigrams_share_all_articles_{}.csv'.format(year))
+        aggregate_share_in_cluster.to_csv(path_or_buf='../results/bigrams_share_in_cluster_{}.csv'.format(year))
+        aggregate_share_not_in_cluster.to_csv(path_or_buf='../results/bigrams_share_not_in_cluster_{}.csv'.format(year))
+        aggregate_share_in_cluster_tomorrow.to_csv(
+            path_or_buf='../results/bigrams_share_in_cluster_tomorrow_{}.csv'.format(year))
+
+        helpers.save_json(aggregate_source_count_all_articles, '../results/total_bigrams_all_articles_{}.json'.format(
+            year))
+        helpers.save_json(aggregate_source_count_in_cluster, '../results/total_bigrams_in_cluster_{}.json'.format(year))
+        helpers.save_json(aggregate_source_count_not_in_cluster, '../results/total_bigrams_not_in_cluster_{}.json'.
+                          format(year))
+        helpers.save_json(aggregate_source_count_in_cluster_tomorrow,
+                          '../results/total_bigrams_in_cluster_tomorrow_{}.json'.format(year))
+
+        if std_type == 'cluster_specific':
+            print('standardizing bigram count for all articles')
+            aggregate_share_in_cluster = bigrams.standardize_bigrams_count(aggregate_share_in_cluster)
+            print('standardizing bigram count in cluster')
+            aggregate_share_not_in_cluster = bigrams.standardize_bigrams_count(aggregate_share_not_in_cluster)
+            print('standardizing bigram count not_in cluster')
+            aggregate_share_in_cluster_tomorrow = bigrams.standardize_bigrams_count(aggregate_share_in_cluster_tomorrow)
+            print('standardizing bigram count for in cluster tomorrow')
+            aggregate_share_all_articles = bigrams.standardize_bigrams_count(aggregate_share_all_articles)
+        else:
+            if std_type == 'all_articles':
+                mean_and_std = bigrams.get_mean_and_deviation(aggregate_share_all_articles)
+                helpers.save_json(mean_and_std, '../data/all_mean_and_std_{}.json'.format(year))
+            else:
+                mean_and_std = bigrams.get_stacked_mean_and_deviation(aggregate_share_in_cluster,
+                                                                      aggregate_share_not_in_cluster)
+                helpers.save_json(mean_and_std, '../data/stacked_mean_and_std_{}.json'.format(year))
+
+            print('standardizing bigram count for all articles')
+            aggregate_share_all_articles = bigrams.standardize_with_mean_and_std(aggregate_share_all_articles,
+                                                                                 mean_and_std)
+            print('standardizing bigram count in cluster')
+            aggregate_share_in_cluster = bigrams.standardize_with_mean_and_std(aggregate_share_in_cluster,
+                                                                               mean_and_std)
+            print('standardizing bigram count not_in cluster')
+            aggregate_share_not_in_cluster = bigrams.standardize_with_mean_and_std(aggregate_share_not_in_cluster,
+                                                                                   mean_and_std)
+            print('standardizing bigram count for in cluster tomorrow')
+            aggregate_share_in_cluster_tomorrow = bigrams.standardize_with_mean_and_std(
+                aggregate_share_in_cluster_tomorrow, mean_and_std)
 
         print('calculating bias of news source by cluster groups')
         bias_all_articles, bias_in_cluster, bias_not_in_cluster, bias_in_cluster_tomorrow = parmap.map(
@@ -829,13 +919,14 @@ def main():
     top_1000_bigrams = pd.read_csv(top1000_bigrams_path)
     group_by = args.group_by
     bias_type = args.bias_type
+    std_type = args.standardize_type
 
     if month is None:
-        bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, bias_type,
+        bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, bias_type, std_type,
                                 threshold=threshold)
     else:
         bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by, bias_type,
-                                 threshold=threshold)
+                                 std_type, threshold=threshold)
 
 
 if __name__ == '__main__':
