@@ -317,6 +317,8 @@ def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, thr
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
 
+    conn.close()
+
     unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
@@ -407,6 +409,7 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
 
+    conn.close()
     unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     clustered_articles = [articles_day1[i] for i in range(len(articles_day1)) if i not in unclustered_articles_indices]
@@ -491,6 +494,8 @@ def get_tomorrows_cluster_of_articles_group_by_median_for_date(curr_date, path, 
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
 
+    conn.close()
+
     unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
@@ -565,6 +570,8 @@ def get_clusters_and_size_for_day(curr_date, path, dct, tfidf_model, threshold=0
 
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    conn.close()
 
     unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
@@ -771,6 +778,8 @@ def get_stats_for_date(path, dct, tfidf_model, curr_date, threshold=0.3):
     articles_day2 = list(conn.select_articles_by_date(next_date))
     count_grouped_by_source = conn.get_count_of_articles_for_date_by_source(curr_date)
 
+    conn.close()  # close database connection
+
     assert (articles_day1 is not None and articles_day2 is not None)
 
     results = initialize_results(count_grouped_by_source)
@@ -792,8 +801,6 @@ def get_stats_for_date(path, dct, tfidf_model, curr_date, threshold=0.3):
     for it in unclustered_articles_in_day2_cluster:
         source = it.source
         results[source][2] += 1
-
-    conn.close()  # close database connection
 
     # modify dictionary to pandas dataframes, since it is easier to perform group operations
     df_rows = []
