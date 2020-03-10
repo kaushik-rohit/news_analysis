@@ -376,8 +376,8 @@ def get_within_source_cluster_of_articles(path, dct, tfidf_model, year, month, t
     pool.close()
 
     for stat in stats:
-        within_source_tomorrow_cluster = helpers.combine_dct(within_source_tomorrow_cluster, stat[0])
-        within_source_in_cluster = helpers.combine_dct(within_source_in_cluster, stat[1])
+        within_source_tomorrow_cluster = helpers.combine_two_dictionary(within_source_tomorrow_cluster, stat[0])
+        within_source_in_cluster = helpers.combine_two_dictionary(within_source_in_cluster, stat[1])
 
     return within_source_tomorrow_cluster, within_source_in_cluster
 
@@ -573,13 +573,24 @@ def get_clusters_and_size_for_day(curr_date, path, dct, tfidf_model, threshold=0
 
     conn.close()
 
+    cluster_sizes_for_tomorrows_cluster = {source: [] for source in helpers.source_names}
+    cluster_sizes_for_in_cluster = {source: [] for source in helpers.source_names}
+
     unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    clustered_articles_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
                                                                         tfidf_model, threshold=threshold)
 
-    cluster_sizes = [len(idx) + 1 for i, idx in unclustered_articles_indices_in_day2_cluster]
-    return cluster_sizes
+    for idx, indices in unclustered_articles_indices_in_day2_cluster:
+        source = unclustered_articles[idx].source
+        cluster_sizes_for_tomorrows_cluster[source] += [len(indices) + 1]
+
+    for idx, indices in clustered_articles_indices:
+        source = articles_day1[idx].source
+        cluster_sizes_for_in_cluster[source] += [len(indices) + 1]
+
+    return cluster_sizes_for_tomorrows_cluster, cluster_sizes_for_in_cluster
 
 
 def get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, agg_later=False, threshold=0.3):
@@ -609,32 +620,82 @@ def get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, 
                                                          for curr_date in date_range])
     pool.close()
 
-    if agg_later:
-        number_of_clusters = [len(stat) for stat in stats]
-        all_cluster_sizes = []
-        for stat in stats:
-            all_cluster_sizes += stat
+    tomorrow_clusters_stat = [stat[0] for stat in stats]
+    in_cluster_stat = [stat[1] for stat in stats]
 
-        return calendar.month_name[month], int(np.mean(number_of_clusters)), np.median(all_cluster_sizes)
+    if agg_later:
+        return tomorrow_clusters_stat, in_cluster_stat
+
+    agg_tomorrow_clusters_stat = helpers.combine_list_of_dictionary(tomorrow_clusters_stat)
+    agg_in_cluster_stat = helpers.combine_list_of_dictionary(in_cluster_stat)
 
     rows = []
-    for i in range(len(date_range)):
-        rows += [[date_range[i], len(stats[i]), np.median(stats[i])]]
+    for source, cluster_sizes in agg_tomorrow_clusters_stat.items():
+        rows += [[source, len(cluster_sizes), np.median(cluster_sizes)]]
+
+    clusters_median = pd.DataFrame(rows, columns=['Source', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/tomorrow_cluster_sizes_{}_{}.csv'.format(year, month))
+
+    rows = []
+    for source, cluster_sizes in agg_in_cluster_stat.items():
+        rows += [[source, len(cluster_sizes), np.median(cluster_sizes)]]
 
     clusters_median = pd.DataFrame(rows, columns=['Date', 'Number of Clusters', 'Size of Cluster'])
-    clusters_median.to_csv(path_or_buf='../results/cluster_sizes_{}_{}.csv'.format(year, month))
+    clusters_median.to_csv(path_or_buf='../results/in_cluster_sizes_{}_{}.csv'.format(year, month))
+
+    tomorrow_clusters_stat_all_source = helpers.flatten(agg_tomorrow_clusters_stat.values())
+    in_clusters_stat_all_source = helpers.flatten(agg_in_cluster_stat.values())
+
+    rows = []
+    rows += [['tomorrow_cluster', len(tomorrow_clusters_stat_all_source),
+              np.median(tomorrow_clusters_stat_all_source)]]
+
+    rows += [['in_cluster', len(in_clusters_stat_all_source),  np.median(in_clusters_stat_all_source)]]
+    clusters_median = pd.DataFrame(rows, columns=['cluster', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/overall_cluster_sizes_{}_{}.csv'.format(year, month))
 
 
 def get_clusters_and_median_size_for_year(path, dct, tfidf_model, year, threshold=0.3):
     assert (1 > threshold > 0)
-    rows = []
-    for month in range(1, 12 + 1):
-        rows += [get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, agg_later=True,
-                                                        threshold=threshold)]
-        print(rows[month-1])
+    stats = []
+    tomorrow_clusters_stat = []
+    in_cluster_stat = []
 
-    clusters = pd.DataFrame(rows, columns=['month', 'number of cluster', 'size of cluster'])
-    clusters.to_csv(path_or_buf='../results/cluster_sizes_{}.csv'.format(year))
+    for month in range(1, 12 + 1):
+        stats += [get_clusters_and_median_size_for_month(path, dct, tfidf_model, year, month, agg_later=True,
+                                                         threshold=threshold)]
+
+    for stat in stats:
+        tomorrow_clusters_stat += stat[0]
+        in_cluster_stat += stat[1]
+
+    agg_tomorrow_clusters_stat = helpers.combine_list_of_dictionary(tomorrow_clusters_stat)
+    agg_in_cluster_stat = helpers.combine_list_of_dictionary(in_cluster_stat)
+
+    rows = []
+    for source, cluster_sizes in agg_tomorrow_clusters_stat.items():
+        rows += [[source, len(cluster_sizes), np.median(cluster_sizes)]]
+
+    clusters_median = pd.DataFrame(rows, columns=['Source', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/tomorrow_cluster_sizes_{}.csv'.format(year))
+
+    rows = []
+    for source, cluster_sizes in agg_in_cluster_stat.items():
+        rows += [[source, len(cluster_sizes), np.median(cluster_sizes)]]
+
+    clusters_median = pd.DataFrame(rows, columns=['Date', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/in_cluster_sizes_{}.csv'.format(year))
+
+    tomorrow_clusters_stat_all_source = helpers.flatten(agg_tomorrow_clusters_stat.values())
+    in_clusters_stat_all_source = helpers.flatten(agg_in_cluster_stat.values())
+
+    rows = []
+    rows += [['tomorrow_cluster', len(tomorrow_clusters_stat_all_source),
+              np.median(tomorrow_clusters_stat_all_source)]]
+
+    rows += [['in_cluster', len(in_clusters_stat_all_source),  np.median(in_clusters_stat_all_source)]]
+    clusters_median = pd.DataFrame(rows, columns=['cluster', 'Number of Clusters', 'Size of Cluster'])
+    clusters_median.to_csv(path_or_buf='../results/overall_cluster_sizes_{}_{}.csv'.format(year, month))
 
 
 def _add_percentages_to_result(stats):

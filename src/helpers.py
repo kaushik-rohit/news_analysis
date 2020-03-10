@@ -64,6 +64,21 @@ def load_json(name):
     return data
 
 
+def save_cluster(in_cluster, not_in_cluster, in_tomorrows_cluster, path):
+    rows = []
+    for article in in_cluster:
+        rows += [[article.date, article.source_id, article.source, 'in_cluster', article.program_name]]
+
+    for article in not_in_cluster:
+        rows += [[article.date, article.source_id, article.source, 'not_in_cluster', article.program_name]]
+
+    for article in in_tomorrows_cluster:
+        rows += [[article.date, article.source_id, article.source, 'in_tomorrows_cluster', article.program_name]]
+
+    df = pd.DataFrame(rows, columns=['date', 'source id', 'source_name', 'cluster', 'title'])
+    df.to_csv(path_or_buf=path)
+
+
 def parse_date(date):
     date = date.split('\n')[0]
 
@@ -135,7 +150,7 @@ def raw_data_to_db(root, db_path='../articles.db'):
                     print("{} doesn't exists. Missing data!!".format(month_path))
 
 
-def combine_dct(dct1, dct2):
+def combine_two_dictionary(dct1, dct2):
     """
     Parameters
     ----------
@@ -158,7 +173,7 @@ def combine_dct(dct1, dct2):
     return combined_dct
 
 
-def combine_dictionaries(dct):
+def combine_list_of_dictionary(dict_list):
     """
     Parameters
     ----------
@@ -169,12 +184,17 @@ def combine_dictionaries(dct):
     a single dictionary with common key elements summed
     """
 
-    ret = dct[0]
+    ret = dict_list[0]
 
-    for i in range(1, len(dct)):
-        ret = combine_dct(ret, dct[i])
+    for i in range(1, len(dict_list)):
+        ret = combine_two_dictionary(ret, dict_list[i])
 
     return ret
+
+
+def flatten(list_of_lists):
+    flat_list = [item for sublist in list_of_lists for item in sublist]
+    return flat_list
 
 
 def remove_stemmed_phrases(s):
