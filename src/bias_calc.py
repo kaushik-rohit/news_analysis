@@ -70,13 +70,21 @@ parser.add_argument('-std', '--standardize_type',
                     default='cluster_specific',
                     help='user specific standardization type for bigrams shares in clusters')
 
+parser.add_argument('-mt', '--median_type',
+                    type=str,
+                    choices=['overall', 'source'],
+                    default='overall',
+                    help='specify whether median should be broken down to source level or overall median should be'
+                         'used when calculating median cluster\'s bias')
 
-def get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold=0.3):
+
+def get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month, group_by, median_type, threshold=0.3):
     """
     A wrapper function to return the bigrams present in the news articles for the given year and month for different
     median clusters.
     Parameters
     ----------
+    median_type
     db_path: (string) path to the articles database
     dct: (gensim dictionary object)
     tfidf_model: (gensim tfidf model)
@@ -95,7 +103,8 @@ def get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month, grou
     """
 
     above_median, below_median, above_median_in_cluster, below_median_in_cluster = \
-        cluster_analysis.get_cluster_of_articles_group_by_median(db_path, dct, tfidf_model, year, month, threshold)
+        cluster_analysis.get_cluster_of_articles_group_by_median(db_path, dct, tfidf_model, year, month, median_type,
+                                                                 threshold)
 
     print('calculating bigrams_below median')
     bigrams_below_median = bigrams.get_bigrams_in_articles(below_median, group_by)
@@ -354,11 +363,12 @@ def _combine_bias_result_for_all_cluster(columns, *args):
 
 
 def bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by,
-                                                 std_type, threshold=0.3):
+                                                 std_type, median_type, threshold=0.3):
     """
 
     Parameters
     ----------
+    median_type
     db_path
     dct
     tfidf_model
@@ -375,7 +385,7 @@ def bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top1
     """
     (bigrams_above_median_tomorrow, bigrams_below_median_tomorrow, bigrams_above_median_in_cluster,
      bigrams_below_median_in_cluster) = get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month,
-                                                                        group_by, threshold=threshold)
+                                                                        group_by, median_type, threshold=threshold)
 
     top_bigrams = top1000_bigram['bigram'].tolist()
 
@@ -397,14 +407,33 @@ def bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top1
     del bigrams_above_median_tomorrow, bigrams_below_median_tomorrow, bigrams_above_median_in_cluster, \
         bigrams_below_median_in_cluster
 
-    print('standardizing bigram count for above median tomorrow articles')
-    top_bigrams_freq_above_median = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median)
-    print('standardizing bigram count for below median tomorrow articles')
-    top_bigrams_freq_below_median = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median)
-    print('standardizing bigram count for above median in cluster articles')
-    top_bigrams_freq_above_median2 = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median2)
-    print('standardizing bigram count for below median in cluster articles')
-    top_bigrams_freq_below_median2 = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median2)
+    if std_type == 'cluster_specific':
+        print('standardizing bigram count for above median tomorrow articles')
+        top_bigrams_freq_above_median = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median)
+        print('standardizing bigram count for below median tomorrow articles')
+        top_bigrams_freq_below_median = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median)
+        print('standardizing bigram count for above median in cluster articles')
+        top_bigrams_freq_above_median2 = bigrams.standardize_bigrams_count(top_bigrams_freq_above_median2)
+        print('standardizing bigram count for below median in cluster articles')
+        top_bigrams_freq_below_median2 = bigrams.standardize_bigrams_count(top_bigrams_freq_below_median2)
+    else:
+        if std_type == 'all_articles':
+            mean_and_std = helpers.load_json('../data/all_mean_and_std_{}_{}.json'.format(year, month))
+        elif std_type == 'stacked':
+            mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}_{}.json'.format(year, month))
+
+        print('standardizing bigram count for above median tomorrow articles')
+        top_bigrams_freq_above_median = bigrams.standardize_with_mean_and_std(top_bigrams_freq_above_median,
+                                                                              mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        top_bigrams_freq_below_median = bigrams.standardize_with_mean_and_std(top_bigrams_freq_below_median,
+                                                                              mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        top_bigrams_freq_above_median2 = bigrams.standardize_with_mean_and_std(top_bigrams_freq_above_median2,
+                                                                               mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        top_bigrams_freq_below_median2 = bigrams.standardize_with_mean_and_std(top_bigrams_freq_below_median2,
+                                                                               mean_and_std)
 
     print('calculating bias of news source by cluster groups')
     bias_above_median, bias_below_median, bias_above_median2, bias_below_median2 = parmap.map(
@@ -421,7 +450,7 @@ def bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top1
                'bias_for_above_median_in_cluster', 'bias_for_below_in_cluster']
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_above_median, bias_below_median,
                                                             bias_above_median2, bias_below_median2)
-    combined_bias_df.to_csv(path_or_buf='../results/bias_median_{}_{}.csv'.format(year, month))
+    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_median_{}_{}.csv'.format(median_type, year, month))
 
 
 def bias_averaged_over_month_for_within_source_clusters(db_path, dct, tfidf_model, top1000_bigram, year, month,
@@ -1064,12 +1093,13 @@ def main():
     std_type = args.standardize_type
 
     if bias_type == 'median_groups':
+        median_type = args.median_type
         if month is None:
             bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by,
-                                                        std_type, threshold)
+                                                        std_type, median_type, threshold)
         else:
             bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year, month,
-                                                         group_by, std_type, threshold)
+                                                         group_by, std_type, median_type, threshold)
     elif bias_type == 'within_source':
         if month is None:
             bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year,

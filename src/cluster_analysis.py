@@ -467,10 +467,13 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     return in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster
 
 
-def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf_model, threshold):
+def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf_model, medians, median_type,
+                                                     threshold):
     """
     Parameters
     ----------
+    median_type
+    medians
     path: (string) path to articles database
     dct: (gensim dictionary)
     tfidf_model: (gensim tfidf model)
@@ -487,8 +490,6 @@ def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf
 
     print('calculating median clusters for {}'.format(curr_date))
 
-    tomorrow_median_length = 2
-    in_cluster_median_length = 5
     articles_in_tomorrows_cluster_above_median = []
     articles_in_tomorrows_cluster_below_median = []
     articles_in_cluster_above_median = []
@@ -506,14 +507,29 @@ def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf
 
     clustered_articles_indices = get_articles_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
 
+    in_cluster_median_length = 0
+    tomorrow_median_length = 0
+
+    if median_type == 'overall':
+        in_cluster_median_length = medians['in_cluster']
+        tomorrow_median_length = medians['tomorrow_cluster']
+
     for i, indices in clustered_articles_indices:
-        if len(indices) <= in_cluster_median_length:
+        if median_type == 'source':
+            source = articles_day1[i].source
+            in_cluster_median_length = medians['in_cluster'][source]
+
+        if len(indices) <= (in_cluster_median_length - 1):
             articles_in_cluster_below_median.append(articles_day1[i])
         else:
             articles_in_cluster_above_median.append(articles_day1[i])
 
     for i, indices in unclustered_articles_indices_in_day2_cluster:
-        if len(indices) <= tomorrow_median_length:
+        if median_type == 'source':
+            source = articles_day1[i].source
+            tomorrow_median_length = medians['tomorrow'][source]
+
+        if len(indices) <= (tomorrow_median_length - 1):
             articles_in_tomorrows_cluster_below_median.append(unclustered_articles[i])
         else:
             articles_in_tomorrows_cluster_above_median.append(unclustered_articles[i])
@@ -522,7 +538,7 @@ def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf
             articles_in_cluster_above_median, articles_in_cluster_below_median)
 
 
-def get_cluster_of_articles_group_by_median(path, dct, tfidf_model, year, month, threshold):
+def get_cluster_of_articles_group_by_median(path, dct, tfidf_model, year, month, median_type, threshold):
     """
     Parameters
     ----------
@@ -547,11 +563,17 @@ def get_cluster_of_articles_group_by_median(path, dct, tfidf_model, year, month,
     in_cluster_above_median = []
     in_cluster_below_median = []
 
+    if median_type == 'overall':
+        medians = helpers.load_json('../data/median_cluster_size_overall_{}.json'.format(year))
+    else:
+        medians = helpers.load_json('../data/median_cluster_size_by_source_{}.json'.format(year))
+
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
     print('calculating median clusters for {} {}'.format(year, calendar.month_name[month]))
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
     stats = pool.starmap(get_cluster_of_articles_group_by_median_for_date,
-                         [(curr_date, path, dct, tfidf_model, threshold) for curr_date in date_range])
+                         [(curr_date, path, dct, tfidf_model, medians, median_type, threshold)
+                          for curr_date in date_range])
     pool.close()
 
     for stat in stats:
