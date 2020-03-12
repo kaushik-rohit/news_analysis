@@ -729,7 +729,7 @@ def aggregate_bigrams_month_share_group_by_source(top_bigrams_month_share, total
 
 
 def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top1000_bigram, year, group_by, std_type,
-                                                threshold=0.3):
+                                                median_type, threshold=0.3):
     assert (1 > threshold > 0)
     top_bigrams = top1000_bigram['bigram'].tolist()
 
@@ -745,11 +745,8 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
     # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
     for month in range(1, 12 + 1):
         (bigrams_above_median_tomorrow, bigrams_below_median_tomorrow, bigrams_above_median_in_cluster,
-         bigrams_below_median_in_cluster) = get_bigrams_for_year_and_month_by_clusters(db_path, dct,
-                                                                                       tfidf_model, year,
-                                                                                       month, group_by,
-                                                                                       bias_type,
-                                                                                       threshold=threshold)
+         bigrams_below_median_in_cluster) = get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month,
+                                                                            group_by, median_type, threshold=threshold)
 
         # convert bigrams list to bigrams shares
         total_bigrams_above_median_tomorrow = bigrams.convert_bigrams_to_shares(bigrams_above_median_tomorrow)
@@ -812,14 +809,33 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
         aggregate_source_count_below_median2,
         top_bigrams)
 
-    print('standardizing bigram count for above median tomorrow articles')
-    aggregate_share_above_median = bigrams.standardize_bigrams_count(aggregate_share_above_median)
-    print('standardizing bigram count below median tomorrow articles')
-    aggregate_share_below_median = bigrams.standardize_bigrams_count(aggregate_share_below_median)
-    print('standardizing bigram count for above median in cluster articles')
-    aggregate_share_above_median2 = bigrams.standardize_bigrams_count(aggregate_share_above_median2)
-    print('standardizing bigram count below median in cluster articles')
-    aggregate_share_below_median2 = bigrams.standardize_bigrams_count(aggregate_share_below_median2)
+    if std_type == 'cluster_specific':
+        print('standardizing bigram count for above median tomorrow articles')
+        aggregate_share_above_median = bigrams.standardize_bigrams_count(aggregate_share_above_median)
+        print('standardizing bigram count below median tomorrow articles')
+        aggregate_share_below_median = bigrams.standardize_bigrams_count(aggregate_share_below_median)
+        print('standardizing bigram count for above median in cluster articles')
+        aggregate_share_above_median2 = bigrams.standardize_bigrams_count(aggregate_share_above_median2)
+        print('standardizing bigram count below median in cluster articles')
+        aggregate_share_below_median2 = bigrams.standardize_bigrams_count(aggregate_share_below_median2)
+    else:
+        if std_type == 'all_articles':
+            mean_and_std = helpers.load_json('../data/all_mean_and_std_{}.json'.format(year))
+        elif std_type == 'stacked':
+            mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}.json'.format(year))
+
+        print('standardizing bigram count for above median tomorrow articles')
+        aggregate_share_above_median = bigrams.standardize_with_mean_and_std(aggregate_share_above_median,
+                                                                             mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        aggregate_share_below_median = bigrams.standardize_with_mean_and_std(aggregate_share_below_median,
+                                                                             mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        aggregate_share_above_median2 = bigrams.standardize_with_mean_and_std(aggregate_share_above_median2,
+                                                                              mean_and_std)
+        print('standardizing bigram count for above median tomorrow articles')
+        aggregate_share_below_median2 = bigrams.standardize_with_mean_and_std(aggregate_share_below_median2,
+                                                                              mean_and_std)
 
     print('calculating bias of news source by cluster groups')
     bias_above_median, bias_below_median, bias_above_median2, bias_below_median2 = parmap.map(
