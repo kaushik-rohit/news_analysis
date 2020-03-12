@@ -779,8 +779,8 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
     # get aggregate bigram count across month, i.e count of bigrams in an year grouped by month
     aggregate_source_count_above_median = aggregate_bigrams_month_count(total_bigrams_by_month_above_median)
     aggregate_source_count_below_median = aggregate_bigrams_month_count(total_bigrams_by_month_below_median)
-    aggregate_source_count_above_median2 = aggregate_bigrams_month_count(total_bigrams_above_median_in_cluster)
-    aggregate_source_count_below_median2 = aggregate_bigrams_month_count(total_bigrams_below_median_in_cluster)
+    aggregate_source_count_above_median2 = aggregate_bigrams_month_count(total_bigrams_by_month_above_median_in_cluster)
+    aggregate_source_count_below_median2 = aggregate_bigrams_month_count(total_bigrams_by_month_below_median_in_cluster)
 
     # get share of top bigrams for a year by aggregating the share for each month
     print('aggregating bigram share for above median cluster')
