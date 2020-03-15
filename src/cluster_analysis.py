@@ -308,7 +308,7 @@ def get_within_source_cluster_for_the_day(curr_date, path, dct, tfidf_model, thr
 
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
+    conn = db.NewsDb(path)
 
     print('calculating within source clusters for {}'.format(curr_date))
     within_source_tomorrow_cluster = {source: [] for source in helpers.source_names}
@@ -402,7 +402,7 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
 
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
+    conn = db.NewsDb(path)
 
     print('calculating clusters for {}'.format(curr_date))
 
@@ -486,7 +486,7 @@ def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf
 
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
+    conn = db.NewsDb(path)
 
     print('calculating median clusters for {}'.format(curr_date))
 
@@ -602,7 +602,7 @@ def get_clusters_and_size_for_day(curr_date, path, dct, tfidf_model, threshold=0
 
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
+    conn = db.NewsDb(path)
 
     print('calculating clusters for {}'.format(curr_date))
 
@@ -871,7 +871,7 @@ def get_stats_for_date(path, dct, tfidf_model, curr_date, threshold=0.3):
     print('Calculating stats for the day: {}'.format(curr_date))
     delta = timedelta(days=1)
     next_date = curr_date + delta
-    conn = db.ArticlesDb(path)
+    conn = db.NewsDb(path)
 
     articles_day1 = list(conn.select_articles_by_date(curr_date))
     articles_day2 = list(conn.select_articles_by_date(next_date))

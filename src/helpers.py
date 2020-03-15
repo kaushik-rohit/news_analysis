@@ -47,6 +47,29 @@ id_to_name_map = {
     '411938': 'Standard'
 }
 
+topics_id_to_name_map = {
+    '02': ' Agriculture, animals, food and rural affairs',
+    '03': 'Asylum, immigration and nationality',
+    '04': 'Business, industry and consumers',
+    '05': 'Communities and families',
+    '06': 'Crime, civil law, justice and rights',
+    '07': 'Culture, media and sport',
+    '08': 'Defence',
+    '09': 'Economy and finance',
+    '10': 'Education',
+    '11': 'Employment and training',
+    '12': 'Energy and environment',
+    '13': 'European Union',
+    '14': 'Health services and medicine',
+    '15': 'Housing and planning',
+    '16': 'International affairs',
+    '17': 'Parliament, government and politics',
+    '18': 'Science and technology',
+    '19': 'Social security and pensions',
+    '20': 'Social services',
+    '21': 'Transport'
+}
+
 
 def save(obj, name):
     with open(name, 'wb') as f:
@@ -98,6 +121,25 @@ def parse_date(date):
     return date_parser.parse(date)
 
 
+def raw_topics_data_to_db(root, db_path='../articles.db'):
+    topics = os.listdir(root)
+    topics = [topic for topic in topics if (topic.endswith('csv') and not topic.startswith('00')
+                                            and not topic.startswith('01') and not topic.startswith('22'))]
+
+    conn = db.NewsDb(db_path)
+    for topic in topics:
+        print('insert into db rows from {}'.format(topic))
+        path = os.path.join(root, topic)
+        topic_df = pd.read_csv(path)
+
+        _id = topic.split('_')[0]
+        topics = topic_df.apply(lambda row: (_id, topics_id_to_name_map[_id], row['MPs'], row['bigrams'],
+                                             row['freq']), axis=1).tolist()
+        conn.insert_topics(topics)
+
+    conn.close()
+
+
 def raw_data_to_db(root, db_path='../articles.db'):
     """Inserts raw news articles data from csv files to a sqlite3 database after preprocessing.
     Parameters
@@ -109,7 +151,7 @@ def raw_data_to_db(root, db_path='../articles.db'):
     None
     """
     newspapers_id = os.listdir(root)
-    conn = db.ArticlesDb(db_path)
+    conn = db.NewsDb(db_path)
 
     for newspaper in newspapers_id:
         newspaper_path = os.path.join(root, newspaper)
@@ -148,6 +190,7 @@ def raw_data_to_db(root, db_path='../articles.db'):
                     conn.insert_articles(articles)
                 else:
                     print("{} doesn't exists. Missing data!!".format(month_path))
+    conn.close()
 
 
 def combine_two_dictionary(dct1, dct2):

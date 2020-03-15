@@ -78,7 +78,7 @@ def train_tfidf(docs, out, name):
 def main():
     args = parser.parse_args()
 
-    conn = db.ArticlesDb(args.db_path)
+    conn = db.NewsDb(args.db_path)
 
     if args.month is None:
         n = conn.get_count_of_articles_for_year(args.year)

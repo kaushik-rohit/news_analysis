@@ -9,13 +9,14 @@ CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation, remove_sto
 
 class Article:
 
-    def __init__(self, source_id, source, date, program_name, transcript):
+    def __init__(self, source_id, source, date, program_name, transcript, topic):
         self.source_id = source_id
         self.source = source
         self.date = date
         self.program_name = program_name
         self.transcript = transcript
         self.bigrams = None
+        self.topic = topic
 
     def __str__(self):
         return 'article id: {}, name: {}, date: {}, program_name: {}'.format(self.source_id, self.source, self.date,
@@ -28,6 +29,20 @@ class Article:
             return True
 
         return False
+
+
+class Topic:
+
+    def __init__(self, _id, topic, MP, bigram, frequency):
+        self.id = _id
+        self.topic = topic
+        self.MP = MP
+        self.bigram = bigram
+        self.frequency = frequency
+
+    def __str__(self):
+        return 'topic id: {}, used by: {}, bigram: {}, frequency: {}'.format(self.id, self.MP, self.bigram,
+                                                                             self.frequency)
 
 
 class CorpusIter(object):

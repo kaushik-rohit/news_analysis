@@ -181,7 +181,7 @@ def get_bigrams_by_clusters(db_path, dct, tfidf_model, year, month, group_by, th
     bigrams_all_articles:
     """
 
-    conn = db.ArticlesDb(db_path)
+    conn = db.NewsDb(db_path)
     n_articles = conn.get_count_of_articles_for_year_and_month(year, month)
     conn.close()
 
@@ -851,7 +851,7 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
                'bias_below_median_in_cluster']
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_above_median, bias_below_median,
                                                             bias_above_median2, bias_below_median2)
-    combined_bias_df.to_csv(path_or_buf='../results/bias_median_{}.csv'.format(year))
+    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_median_{}_std={}.csv'.format(median_type, year, std_type))
 
 
 def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model, top1000_bigram, year, group_by,

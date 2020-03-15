@@ -1,24 +1,34 @@
 import sqlite3
 from sqlite3 import Error
-from models import Article
+from models import Article, Topic
 from datetime import date
 
 # create queries
-create_table_query = ("create table if not exists articles "
-                      "(source_id TEXT, "
-                      "source TEXT, "
-                      "day INTEGER, "
-                      "month INTEGER, "
-                      "year INTEGER, "
-                      "program_name TEXT, "
-                      "transcript TEXT, "
-                      "PRIMARY KEY (source_id, day, month, year, program_name));")
+create_articles_table_query = ("create table if not exists articles "
+                               "(source_id TEXT, "
+                               "source TEXT, "
+                               "day INTEGER, "
+                               "month INTEGER, "
+                               "year INTEGER, "
+                               "program_name TEXT, "
+                               "transcript TEXT, "
+                               "PRIMARY KEY (source_id, day, month, year, program_name));")
+
+create_topics_table_query = ("create table if not exists topics "
+                             "(id TEXT, "
+                             "topic TEXT, "
+                             "MP TEXT, "
+                             "bigram TEXT, "
+                             "frequency INTEGER, "
+                             "PRIMARY KEY (id, MP, bigram));")
 
 # insert queries
-insert_table_query = ("insert or ignore into articles(source_id, source, day, month, year, program_name, "
-                      "transcript) values(?, ?, ?, ?, ?, ?, ?);")
+insert_article_query = ("insert or ignore into articles(source_id, source, day, month, year, program_name, "
+                        "transcript) values(?, ?, ?, ?, ?, ?, ?);")
 
-# select queries
+insert_topic_query = "insert or ignore into topics(id, topic, MP, bigram, frequency) values(?, ?, ?, ?, ?);"
+
+# select articles queries
 select_articles_by_year_query = "select * from articles where year=?"
 
 select_articles_by_month_query = "select * from articles where year=? and month=?"
@@ -46,12 +56,16 @@ get_count_by_date_and_source_query = ("select source, count(*) as total_articles
                                       "where year=? and month=? and day=? group by source")
 
 
-class ArticlesDb:
+# select topics queries
+
+
+class NewsDb:
     """
     The Database class that handles the connection to sqlite3 db where news articles are stored.
     It provides some helper functions that can be used to gather stats from the data or perform
     read-write query.
     """
+
     def __init__(self, path):
         self.conn = None
         self.path = path
@@ -61,7 +75,15 @@ class ArticlesDb:
     def insert_articles(self, articles):
         try:
             cur = self.conn.cursor()
-            cur.executemany(insert_table_query, articles)
+            cur.executemany(insert_article_query, articles)
+            self.conn.commit()
+        except Error as e:
+            print(e)
+
+    def insert_topics(self, topics):
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(insert_topic_query, topics)
             self.conn.commit()
         except Error as e:
             print(e)
@@ -153,7 +175,8 @@ class ArticlesDb:
     def _create_table(self):
         try:
             cur = self.conn.cursor()
-            cur.execute(create_table_query)
+            cur.execute(create_articles_table_query)
+            cur.execute(create_topics_table_query)
             self.conn.commit()
         except Error as e:
             print(e)
@@ -170,4 +193,4 @@ class ResultIterator:
 
     def __iter__(self):
         for row in self.rows:
-            yield Article(row[0], row[1], date(row[4], row[3], row[2]), row[5], row[6])
+            yield Article(row[0], row[1], date(row[4], row[3], row[2]), row[5], row[6], row[7])
