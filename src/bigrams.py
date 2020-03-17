@@ -35,6 +35,53 @@ def preprocess(sent):
             len(token) > 1), sent))
 
 
+def transform_doc_to_bigram(article):
+    """
+    Calculates bigrams present in a news article
+    Parameters
+    ----------
+    @article: Article Object
+
+    Returns
+    -------
+    (source, bigram) source name and list of bigrams in article transcript as a tuple
+    """
+
+    sentences = nltk.sent_tokenize(article.transcript.lower())
+    tokenized = map(nltk.tokenize.word_tokenize, sentences)
+    tokenized = map(preprocess, tokenized)
+    tokenized = map(stem_wrapper, tokenized)
+    bigrams = map(ngrams_wrapper, tokenized)
+    bigram = list(itertools.chain.from_iterable(bigrams))
+
+    for i in range(len(bigram)):
+        bigram[i] = bigram[i][0] + '_' + bigram[i][1]
+
+    article.bigrams = bigram
+
+    return bigram
+
+
+def transform_corpus_to_bigrams(articles, pbar=True):
+    """
+    Calculates bigrams present in a list of news articles. These bigrams are combined and grouped by news source.
+    It calculates the bigram for articles in parallel and later combine these bigrams to form a dictionary.
+    The method return a dictionary with keys as news source and values as bigrams.
+    Parameters
+    ----------
+    @articles: list of news articles
+
+    Returns
+    -------
+    A dictionary with key as source and value as a Counter object containing frequency of bigrams in the articles from
+    these news source
+    """
+
+    bigrams = parmap.map(transform_doc_to_bigram, articles, pm_pbar=pbar)
+
+    return bigrams
+
+
 def get_bigrams_for_single_article(article, group_by):
     """
     Calculates bigrams present in a news article

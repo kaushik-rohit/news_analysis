@@ -47,8 +47,10 @@ id_to_name_map = {
     '411938': 'Standard'
 }
 
+topics_id = ['02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
+             '19', '20', '21']
 topics_id_to_name_map = {
-    '02': ' Agriculture, animals, food and rural affairs',
+    '02': 'Agriculture, animals, food and rural affairs',
     '03': 'Asylum, immigration and nationality',
     '04': 'Business, industry and consumers',
     '05': 'Communities and families',

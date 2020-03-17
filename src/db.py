@@ -57,6 +57,12 @@ get_count_by_date_and_source_query = ("select source, count(*) as total_articles
 
 
 # select topics queries
+select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where topic=? "
+                                "group by id, topic, bigram order by freq desc limit ?")
+
+select_top_bigrams = "select bigram, sum(frequency) as freq from topics group by bigram order by freq desc limit ?"
+
+select_bigram_freq_for_topic = "select bigram, sum(frequency) as freq from topics where id=? group by bigram"
 
 
 class NewsDb:
@@ -162,6 +168,35 @@ class NewsDb:
         cur.execute(get_distinct_source_for_month_query, (year, month))
 
         return cur.fetchall()
+
+    def get_bigram_freq_for_topic(self, topic_id):
+        bigrams_freq = {}
+        cur = self.conn.cursor()
+        cur.execute(select_bigram_freq_for_topic, (topic_id, ))
+        rows = cur.fetchall()
+
+        for row in rows:
+            bigrams_freq[row[0]] = row[1]
+        return bigrams_freq
+
+    def get_corpus_for_topic(self, topic_id, bigrams):
+        corpus = []
+        freqs = self.get_bigram_freq_for_topic(topic_id)
+        for bigram in bigrams:
+            if bigram in freqs:
+                corpus += [bigram] * freqs[bigram]
+        return corpus
+
+    def select_top_bigrams(self, top_n):
+        bigrams_freq = []
+        cur = self.conn.cursor()
+        cur.execute(select_top_bigrams, (top_n, ))
+        rows = cur.fetchall()
+
+        for row in rows:
+            bigrams_freq += [row[0]]
+
+        return bigrams_freq
 
     def _get_connection(self, path):
         if self.conn is not None:
