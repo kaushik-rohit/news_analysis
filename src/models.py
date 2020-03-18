@@ -66,3 +66,16 @@ class BoWIter(object):
             bow = self.dict.doc2bow(preprocess_string(doc.transcript, CUSTOM_FILTERS))
 
             yield bow
+
+
+class BoWIter1(object):
+
+    def __init__(self, dictionary, docs):
+        self.dict = dictionary
+        self.docs = docs
+
+    def __iter__(self):
+        for doc in self.docs:
+            bow = self.dict.doc2bow(doc)
+
+            yield bow
