@@ -55,6 +55,9 @@ get_distinct_source_for_month_query = "select distinct(source) from articles whe
 get_count_by_date_and_source_query = ("select source, count(*) as total_articles from articles "
                                       "where year=? and month=? and day=? group by source")
 
+update_article_topic = ("update articles set topic=? where source_id=? and day=? and month=? and year=? "
+                        "and program_name=?")
+
 
 # select topics queries
 select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where topic=? "
@@ -168,6 +171,23 @@ class NewsDb:
         cur.execute(get_distinct_source_for_month_query, (year, month))
 
         return cur.fetchall()
+
+    def update_topic_for_articles(self, articles, topics):
+        assert(len(articles) == len(topics))
+        n = len(articles)
+        params = []
+
+        for i in range(n):
+            article = articles[i]
+            topic = topics[i]
+            params.append((topic, article.source_id, article.date.day, article.date.month, article.date.year,
+                           article.program_name))
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(update_article_topic, params)
+            self.conn.commit()
+        except Error as e:
+            print(e)
 
     def get_bigram_freq_for_topic(self, topic_id):
         bigrams_freq = {}
