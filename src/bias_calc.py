@@ -189,6 +189,7 @@ def get_bigrams_by_clusters(db_path, dct, tfidf_model, year, month, group_by, th
                                                                                                tfidf_model,
                                                                                                year, month,
                                                                                                threshold)
+    helpers.save_cluster(in_cluster, not_in_cluster, in_cluster_tomorrow, '../results/clusters_{}_{}.csv'.format(year, month))
 
     all_articles = in_cluster + not_in_cluster
 
@@ -553,13 +554,13 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
 
     if std_type == 'cluster_specific':
         print('standardizing bigram count for all articles')
-        top_bigrams_freq_all_articles = bigrams.standardize_with_mean_and_std(top_bigrams_freq_all_articles)
+        top_bigrams_freq_all_articles = bigrams.standardize_bigrams_count(top_bigrams_freq_all_articles)
         print('standardizing bigram count in cluster')
-        top_bigrams_freq_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_in_cluster)
+        top_bigrams_freq_in_cluster = bigrams.standardize_bigrams_count(top_bigrams_freq_in_cluster)
         print('standardizing bigram count not_in cluster')
-        top_bigrams_freq_not_in_cluster = bigrams.standardize_with_mean_and_std(top_bigrams_freq_not_in_cluster)
+        top_bigrams_freq_not_in_cluster = bigrams.standardize_bigrams_count(top_bigrams_freq_not_in_cluster)
         print('standardizing bigram count for in cluster tomorrow')
-        top_bigrams_freq_in_cluster_tomorrow = bigrams.standardize_with_mean_and_std(
+        top_bigrams_freq_in_cluster_tomorrow = bigrams.standardize_bigrams_count(
             top_bigrams_freq_in_cluster_tomorrow)
     else:
         if std_type == 'all_articles':
@@ -931,8 +932,7 @@ def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model
     bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}.csv'.format(year))
 
 
-def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, bias_type, std_type,
-                            threshold=0.3):
+def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, std_type, threshold=0.3):
     """
     Parameters
     ----------
@@ -1087,7 +1087,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     columns = ['source', 'bias_all_articles', 'bias_in_cluster', 'bias_not_in_cluster', 'bias_in_cluster_tomorrow']
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, bias_all_articles, bias_in_cluster,
                                                             bias_not_in_cluster, bias_in_cluster_tomorrow)
-    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_{}.csv'.format(year, group_by))
+    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std={}.csv'.format(year, std_type))
 
 
 def main():
