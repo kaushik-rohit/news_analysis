@@ -89,21 +89,6 @@ def load_json(name):
     return data
 
 
-def save_cluster(in_cluster, not_in_cluster, in_tomorrows_cluster, path):
-    rows = []
-    for article in in_cluster:
-        rows += [[article.date, article.source_id, article.source, 'in_cluster', article.program_name]]
-
-    for article in not_in_cluster:
-        rows += [[article.date, article.source_id, article.source, 'not_in_cluster', article.program_name]]
-
-    for article in in_tomorrows_cluster:
-        rows += [[article.date, article.source_id, article.source, 'in_tomorrows_cluster', article.program_name]]
-
-    df = pd.DataFrame(rows, columns=['date', 'source id', 'source_name', 'cluster', 'title'])
-    df.to_csv(path_or_buf=path)
-
-
 def parse_date(date):
     date = date.split('\n')[0]
 
