@@ -189,7 +189,6 @@ def get_bigrams_by_clusters(db_path, dct, tfidf_model, year, month, group_by, th
                                                                                                tfidf_model,
                                                                                                year, month,
                                                                                                threshold)
-    helpers.save_cluster(in_cluster, not_in_cluster, in_cluster_tomorrow, '../results/clusters_{}_{}.csv'.format(year, month))
 
     all_articles = in_cluster + not_in_cluster
 
@@ -505,7 +504,6 @@ def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, mo
     @top1000_bigram: top 1000 bigrams in MP speeches with alpha and beta bias coefficient
     @month: (int)
     @year: (int)
-    @bias_type:
     @std_type:
     @threshold: (float)
 
@@ -866,8 +864,7 @@ def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model
     total_bigrams_by_month_within_source_in_cluster = []
     for month in range(1, 12 + 1):
         bigrams_within_source_tomorrow, bigrams_within_source_in_cluster = \
-            get_bigrams_for_within_source_clusters(db_path, dct, tfidf_model, year, month, group_by, bias_type,
-                                                   threshold)
+            get_bigrams_for_within_source_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
 
         total_bigrams_within_source_tomorrow = bigrams.convert_bigrams_to_shares_grouped_by_source(
             bigrams_within_source_tomorrow)
@@ -925,11 +922,11 @@ def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model
 
     print('calculating bias within source tomorrow')
     bias_within_source = calculate_bias_group_by_source(aggregate_share_within_source_tomorrow, top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}.csv'.format(year))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_std={}.csv'.format(year, std_type))
 
     print('calculating bias within source in cluster')
     bias_within_source = calculate_bias_group_by_source(aggregate_share_within_source_in_cluster, top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}.csv'.format(year))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_std={}.csv'.format(year, std_type))
 
 
 def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, std_type, threshold=0.3):
@@ -941,7 +938,6 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     @tfidf_model: (gensim tfidf object)
     @top1000_bigrams: (pandas DataFrame)top 1000 bigrams from MP speeches with alpha and beta bias coefficient
     @year: (int)
-    @bias_type: type of bias, whether within source bias, cluster bias or median bias
     @std_type: type of standardization to apply to top bigrams share
     @threshold: (float)
 
