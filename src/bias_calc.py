@@ -487,11 +487,14 @@ def bias_averaged_over_month_for_within_source_clusters(db_path, dct, tfidf_mode
 
     print('calculate bias for within source tomorrow cluster')
     bias_within_source = calculate_bias_group_by_source(top_bigrams_freq_within_source_tomorrow, top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_{}.csv'.format(year, month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_{}_std={}.csv'.format(year, month,
+                                                                                                           std_type))
 
     print('calculate bias for within source in cluster')
     bias_within_source = calculate_bias_group_by_source(top_bigrams_freq_within_source_in_cluster, top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}.csv'.format(year, month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}_std={}.csv'.format(year,
+                                                                                                             month,
+                                                                                                             std_type))
 
 
 def bias_averaged_over_month(db_path, dct, tfidf_model, top1000_bigram, year, month, group_by, std_type, threshold=0.3):
