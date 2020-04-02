@@ -1,10 +1,14 @@
-import os
+from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
+from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
+from gensim.parsing.preprocessing import strip_short, strip_numeric
+from gensim.utils import lemmatize
+from dateutil import parser as date_parser
 import pickle
 import pandas as pd
-import json
-from dateutil import parser as date_parser
-import db
 from copy import copy
+import os
+import json
+import db
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
@@ -73,6 +77,12 @@ topics_id_to_name_map = {
 }
 
 
+def lemma(text):
+    out = [wd.decode('utf-8').split('/')[0] for wd in lemmatize(text)]
+
+    return ' '.join(out)
+
+
 def save(obj, name):
     with open(name, 'wb') as f:
         pickle.dump(obj, f)
@@ -102,10 +112,19 @@ def parse_date(date):
     if 'juliet' in date:
         date = date.replace('juliet', 'july')
 
-    if 'juillet' in date:
-        date = date.replace('juillet', 'july')
-
     return date_parser.parse(date)
+
+
+def preprocess_text(text):
+    CLUSTER_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation, remove_stopwords, stem_text,
+                       strip_non_alphanum, strip_multiple_whitespaces]
+    return preprocess_string(text, CLUSTER_FILTERS)
+
+
+def preprocess_text_for_lda(text):
+    LDA_FILTERS = [lambda x: x.lower(), strip_multiple_whitespaces, strip_tags, strip_punctuation, remove_stopwords,
+                   strip_short, strip_non_alphanum, strip_numeric]
+    return preprocess_string(text, LDA_FILTERS)
 
 
 def raw_topics_data_to_db(root, db_path='../articles.db'):

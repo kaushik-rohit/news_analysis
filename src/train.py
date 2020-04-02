@@ -3,6 +3,7 @@ from gensim import models
 from gensim import corpora
 import db
 import os
+import helpers
 from models import BoWIter, CorpusIter
 
 # create necessary arguments to run the analysis
@@ -51,7 +52,7 @@ def train_tfidf(docs, out, name):
     """
     # build bag of words
     print('Building vocabulary for the corpus')
-    corpus = CorpusIter(docs)
+    corpus = CorpusIter(docs, helpers.preprocess_text)
     dictionary = corpora.Dictionary(iter(corpus))
 
     print('Bag of Words Done!! Trying feature reduction')

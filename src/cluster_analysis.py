@@ -146,9 +146,9 @@ def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, 
 
     """
     similar_articles = []
-
-    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles2)))], num_features=len(dct))
-    articles1_vec = tfidf_model[iter(BoWIter(dct, articles1))]
+    filter_fn = helpers.preprocess_text
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles2, filter_fn)))], num_features=len(dct))
+    articles1_vec = tfidf_model[iter(BoWIter(dct, articles1, filter_fn))]
 
     # if we only want diff source articles cluster, we need to calculate at what indices
     # same source news occurs so that it similarities at these indices can be masked
@@ -203,7 +203,8 @@ def get_articles_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_source
     """
 
     in_cluster = []
-    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
+    filter_fn = helpers.preprocess_text
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus, filter_fn)))], num_features=len(dct))
     # if we only want diff source articles cluster, we need to calculate at what indices
     # same source news occurs so that it similarities at these indices can be masked
     if diff_source:
@@ -257,10 +258,8 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_so
     assert (1 > threshold > 0)
 
     indices = []
-
-    # index_tmpfile = get_tmpfile("index")
-    # index = Similarity(index_tmpfile, tfidf_model[iter(BoWIter(dct, corpus))], num_features=len(dct))
-    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus)))], num_features=len(dct))
+    filter_fn = helpers.preprocess_text
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, corpus, filter_fn)))], num_features=len(dct))
 
     # if we only want diff source articles cluster, we need to calculate at what indices
     # same source news occurs so that it similarities at these indices can be masked

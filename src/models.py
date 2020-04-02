@@ -1,10 +1,3 @@
-from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
-from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
-
-CUSTOM_FILTERS = [lambda x: x.lower(), strip_tags, strip_punctuation, remove_stopwords, stem_text,
-                  strip_non_alphanum, strip_multiple_whitespaces]
-
-# helpers.remove_stemmed_phrases,
 
 
 class Article:
@@ -47,35 +40,31 @@ class Topic:
 
 class CorpusIter(object):
 
-    def __init__(self, docs):
+    def __init__(self, docs, preprocess_fn):
         self.docs = docs
+        self.preprocess_fn = preprocess_fn
 
     def __iter__(self):
         for doc in self.docs:
-            yield preprocess_string(doc.transcript, CUSTOM_FILTERS)
+            if self.preprocess_fn is None:
+                yield self.dict.doc2bow(doc)
+            else:
+                yield self.preprocess_fn(doc.transcript)
 
 
 class BoWIter(object):
 
-    def __init__(self, dictionary, docs):
+    def __init__(self, dictionary, docs, preprocess_fn=None, bigram=None):
         self.dict = dictionary
         self.docs = docs
+        self.preprocess_fn = preprocess_fn
+        self.bigram = bigram
 
     def __iter__(self):
         for doc in self.docs:
-            bow = self.dict.doc2bow(preprocess_string(doc.transcript, CUSTOM_FILTERS))
-
-            yield bow
-
-
-class BoWIter1(object):
-
-    def __init__(self, dictionary, docs):
-        self.dict = dictionary
-        self.docs = docs
-
-    def __iter__(self):
-        for doc in self.docs:
-            bow = self.dict.doc2bow(doc)
+            if self.preprocess_fn is None:
+                bow = self.dict.doc2bow(doc)
+            else:
+                bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.transcript)])
 
             yield bow
