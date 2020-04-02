@@ -2,6 +2,7 @@ import sqlite3
 from sqlite3 import Error
 from models import Article, Topic
 from datetime import date
+import helpers
 
 # create queries
 create_articles_table_query = ("create table if not exists articles "
@@ -57,7 +58,6 @@ get_count_by_date_and_source_query = ("select source, count(*) as total_articles
 
 update_article_topic = ("update articles set topic=? where source_id=? and day=? and month=? and year=? "
                         "and program_name=?")
-
 
 # select topics queries
 select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where topic=? "
@@ -173,7 +173,7 @@ class NewsDb:
         return cur.fetchall()
 
     def update_topic_for_articles(self, articles, topics):
-        assert(len(articles) == len(topics))
+        assert (len(articles) == len(topics))
         n = len(articles)
         params = []
 
@@ -192,7 +192,7 @@ class NewsDb:
     def get_bigram_freq_for_topic(self, topic_id):
         bigrams_freq = {}
         cur = self.conn.cursor()
-        cur.execute(select_bigram_freq_for_topic, (topic_id, ))
+        cur.execute(select_bigram_freq_for_topic, (topic_id,))
         rows = cur.fetchall()
 
         for row in rows:
@@ -210,13 +210,24 @@ class NewsDb:
     def select_top_bigrams(self, top_n):
         bigrams_freq = []
         cur = self.conn.cursor()
-        cur.execute(select_top_bigrams, (top_n, ))
+        cur.execute(select_top_bigrams, (top_n,))
         rows = cur.fetchall()
 
         for row in rows:
             bigrams_freq += [row[0]]
 
         return bigrams_freq
+
+    def select_n_top_bigrams_from_each_topic(self, top_n):
+        bigrams = []
+        for topic in helpers.topics_id:
+            cur = self.conn.cursor()
+            cur.execute(select_top_bigrams_for_topic, (topic, top_n, ))
+            rows = cur.fetchall()
+
+            for row in rows:
+                bigrams += [row[0]]
+        return bigrams
 
     def _get_connection(self, path):
         if self.conn is not None:
