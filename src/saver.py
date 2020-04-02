@@ -64,24 +64,27 @@ def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
     unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
                                                                         tfidf_model, threshold=threshold)
 
-    rows = []
+    rows_in_cluster = []
+    rows_not_in_cluster = []
+    rows_in_tomorrows_cluster = []
+
     for article in clustered_articles:
-        rows += [[article.date, article.source_id, article.source, 'in_cluster', article.program_name, '']]
+        rows_in_cluster += [[article.date, article.source_id, article.source, 'in_cluster', article.program_name]]
 
     for article in unclustered_articles:
-        rows += [[article.date, article.source_id, article.source, 'not_in_cluster', article.program_name, '']]
+        rows_not_in_cluster += [
+            [article.date, article.source_id, article.source, 'not_in_cluster', article.program_name]]
 
     for i, indices in unclustered_articles_indices_in_day2_cluster:
         article = unclustered_articles[i]
-        reported_by = ''
 
         for idx in indices:
-            reported_by += '{}: {}, '.format(articles_day2[idx].source, articles_day2[idx].program_name)
+            tomorrow_article = articles_day2[idx]
+            rows_in_tomorrows_cluster += [[article.date, article.source_id, article.source, 'in_tomorrows_cluster',
+                                           article.program_name, article.transcript, tomorrow_article.source,
+                                           tomorrow_article.program_name, tomorrow_article.transcript]]
 
-        rows += [[article.date, article.source_id, article.source, 'in_tomorrows_cluster', article.program_name,
-                  reported_by]]
-
-    return rows
+    return rows_in_cluster, rows_not_in_cluster, rows_in_tomorrows_cluster
 
 
 def save_clusters_for_month(db_path, dct, tfidf_model, year, month, threshold):
@@ -98,12 +101,29 @@ def save_clusters_for_month(db_path, dct, tfidf_model, year, month, threshold):
                                                    for curr_date in date_range])
     pool.close()
 
-    rows = []
+    rows_in_cluster = []
+    rows_not_in_cluster = []
+    rows_in_tomorrows_cluster = []
 
     for stat in stats:
-        rows += stat
-    df = pd.DataFrame(rows, columns=['date', 'source id', 'source_name', 'cluster', 'title', 'reported by'])
-    df.to_csv(path_or_buf='../results/clusters_{}_{}.csv'.format(year, month))
+        rows_in_cluster += stat[0]
+        rows_not_in_cluster += stat[1]
+        rows_in_tomorrows_cluster += stat[2]
+
+    in_cluster_df = pd.DataFrame(rows_in_cluster, columns=['date', 'source id', 'source_name', 'cluster', 'title'])
+    in_cluster_df.to_csv(path_or_buf='../results/in_cluster_{}_{}.csv'.format(year, month))
+
+    not_in_cluster_df = pd.DataFrame(rows_not_in_cluster, columns=['date', 'source id', 'source_name', 'cluster',
+                                                                   'title'])
+    not_in_cluster_df.to_csv(path_or_buf='../results/not_in_cluster_{}_{}.csv'.format(year, month))
+
+    in_tomorrows_cluster_df = pd.DataFrame(rows_in_tomorrows_cluster, columns=['date', 'source id', 'source_name',
+                                                                               'cluster', 'article title',
+                                                                               'article transcript',
+                                                                               'tomorrows article source',
+                                                                               'tomorrows article title',
+                                                                               'tomorrows articles transcript'])
+    in_tomorrows_cluster_df.to_csv(path_or_buf='../results/in_tomorrow_cluster_{}_{}.csv'.format(year, month))
 
 
 def main():
