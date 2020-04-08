@@ -19,6 +19,10 @@ source_ids = ['400553', '377101', '418973', '244365', '8200', '412338', '138794'
               '138620', '419001', '8010', '142728', '408506', '143296', '363952', '145251', '232240', '145253',
               '389195', '145254', '344305', '8109', '397135', '163795', '412334', '408508', '411938']
 
+median_clusters_name = ['overall_in_tomorrows_cluster_above_median', 'overall_in_tomorrows_cluster_below_median',
+                        'overall_in_cluster_above_median', 'overall_in_cluster_below_median',
+                        'source_in_tomorrows_cluster_above_median', 'source_in_tomorrows_cluster_below_median',
+                        'source_in_cluster_above_median', 'source_in_cluster_below_median']
 id_to_name_map = {
     '400553': 'Belfast Telegraph',
     '377101': 'Scotsman',
