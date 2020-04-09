@@ -94,7 +94,6 @@ def get_bigrams_for_median_clusters(db_path, dct, tfidf_model, year, month, grou
     bigrams_for_median_clusters = {cluster_name: [] for cluster_name in helpers.median_clusters_name}
 
     for cluster_type, cluster in median_clusters.items():
-        print(type(cluster))
         bigrams_for_median_clusters[cluster_type] = bigrams.get_bigrams_in_articles(cluster, group_by)
 
     return bigrams_for_median_clusters
@@ -1097,8 +1096,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     bias_overall_std = bias_result[4:8]
     bias_stacked_std = bias_result[8:12]
 
-    columns = ['source', 'bias_for_above_median_tomorrow', 'bias_for_below_median_tomorrow',
-               'bias_for_above_median_in_cluster', 'bias_for_below_in_cluster']
+    columns = ['source', 'all_articles', 'in_cluster', 'not_in_cluster', 'in_tomorrows_cluster']
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_specific_std)
     combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std=specific.csv'.format(year))
 

@@ -243,7 +243,7 @@ def get_articles_not_in_cluster(corpus, dct, tfidf_model, threshold=0.3, diff_so
     greater than threshold.
     While comparing we use np.count_nonzero(cosine_similarities > threshold)<=1
     since there will always be an article x(itself) such that cosine_similarity
-    of x with x is greater than threshold. ie cosim (x, x) = 1
+    of x with x is greater than threshold. ie cosine (x, x) = 1
 
     Parameters
     ----------
