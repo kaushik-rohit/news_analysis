@@ -793,10 +793,10 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
 
     assert (len(bias_result) == 24)
     overall_bias_specific_std = bias_result[0:4]
-    overall_bias_overall_std = bias_result[4:8]
-    overall_bias_stacked_std = bias_result[8:12]
-    source_bias_specific_std = bias_result[12:16]
-    source_bias_overall_std = bias_result[16:20]
+    source_bias_specific_std = bias_result[4:8]
+    overall_bias_overall_std = bias_result[8:12]
+    source_bias_overall_std = bias_result[12:16]
+    overall_bias_stacked_std = bias_result[16:20]
     source_bias_stacked_std = bias_result[20:24]
 
     columns = ['source', 'bias_for_above_median_tomorrow', 'bias_for_below_median_tomorrow',
