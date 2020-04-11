@@ -881,33 +881,27 @@ def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model
 
     print('calculate bias for within source tomorrow cluster specific std')
     bias_within_source = calculate_bias_group_by_source(within_source_tomorrow_std_shares['specific'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_{}_std=specific.csv'.format(year,
-                                                                                                                 month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_std=specific.csv'.format(year))
 
     print('calculate bias for within source tomorrow cluster overall std')
     bias_within_source = calculate_bias_group_by_source(within_source_tomorrow_std_shares['overall'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_{}_std=overall.csv'.format(year,
-                                                                                                                month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_std=all.csv'.format(year))
 
     print('calculate bias for within source tomorrow cluster stacked std')
     bias_within_source = calculate_bias_group_by_source(within_source_tomorrow_std_shares['stacked'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_{}_std=stacked.csv'.format(year,
-                                                                                                                month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_tomorrow_{}_std=stacked.csv'.format(year))
 
     print('calculate bias for within source in cluster specific std')
     bias_within_source = calculate_bias_group_by_source(within_source_in_cluster_std_shares['specific'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}_std=stacked.csv'.format(year,
-                                                                                                                  month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_std=specific.csv'.format(year))
 
     print('calculate bias for within source in cluster overall std')
     bias_within_source = calculate_bias_group_by_source(within_source_in_cluster_std_shares['overall'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}_std=stacked.csv'.format(year,
-                                                                                                                  month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_std=all.csv'.format(year))
 
     print('calculate bias for within source in cluster stacked std')
     bias_within_source = calculate_bias_group_by_source(within_source_in_cluster_std_shares['stacked'], top1000_bigram)
-    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_{}_std=stacked.csv'.format(year,
-                                                                                                                  month))
+    bias_within_source.to_csv(path_or_buf='../results/bias_within_source_in_cluster_{}_std=stacked.csv'.format(year))
 
 
 def get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, group_by, threshold):
@@ -1077,7 +1071,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
 
     all_mean_and_std = bigrams.get_mean_and_deviation(aggregate_share_all_articles)
     mean_and_std = bigrams.get_stacked_mean_and_deviation(aggregate_share_in_cluster, aggregate_share_not_in_cluster)
-    helpers.save_json(mean_and_std, '../data/all_mean_and_std_{}.json'.format(year))
+    helpers.save_json(all_mean_and_std, '../data/all_mean_and_std_{}.json'.format(year))
     helpers.save_json(mean_and_std, '../data/stacked_mean_and_std_{}.json'.format(year))
 
     shares = [aggregate_share_all_articles, aggregate_share_in_cluster, aggregate_share_not_in_cluster,
@@ -1101,7 +1095,7 @@ def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, gro
     combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std=specific.csv'.format(year))
 
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_overall_std)
-    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std=overall.csv'.format(year))
+    combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std=all.csv'.format(year))
 
     combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_stacked_std)
     combined_bias_df.to_csv(path_or_buf='../results/bias_{}_std=stacked.csv'.format(year))
