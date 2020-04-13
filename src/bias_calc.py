@@ -25,12 +25,12 @@ parser.add_argument('-m', '--month',
                     help='The month for which analysis is to be performed. If month is not provided '
                          'the analysis is performed on the whole year')
 
-parser.add_argument('-y', '--year',
+parser.add_argument('-y', '--years',
                     choices=[2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
                              2015, 2016, 2017, 2018],
+                    nargs='+',
                     type=int,
-                    default=2014,
-                    help='The year for which analysis is to be performed. By default takes the value 2014')
+                    help='The years for which analysis is to be performed.')
 
 parser.add_argument('-dict', '--dictionary',
                     type=str,
@@ -61,7 +61,7 @@ parser.add_argument('-g', '--group-by',
 
 parser.add_argument('-bt', '--bias-type',
                     type=str,
-                    choices=['general', 'within_source', 'median_groups', 'standardization_parameters'],
+                    choices=['general', 'within_source', 'median_groups'],
                     default='general',
                     help='')
 
@@ -744,11 +744,7 @@ def aggregate_bigrams_month_share_group_by_source(top_bigrams_month_share, total
     return aggregate_bigrams_share
 
 
-def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top1000_bigram, year, group_by,
-                                                threshold=0.3):
-    assert (1 > threshold > 0)
-    top_bigrams = top1000_bigram['bigram'].tolist()
-
+def get_median_clusters_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, group_by, threshold):
     top_bigrams_share_by_month = {cluster_name: [] for cluster_name in helpers.median_clusters_name}
     total_bigrams_by_month = {cluster_name: [] for cluster_name in helpers.median_clusters_name}
     aggregate_source_count = {cluster_name: None for cluster_name in helpers.median_clusters_name}
@@ -776,6 +772,17 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
                                                                       total_bigrams_by_month[cluster_name],
                                                                       aggregate_source_count[cluster_name],
                                                                       top_bigrams)
+
+    return aggregate_share, aggregate_source_count
+
+
+def bias_median_clusters_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by,
+                                            threshold=0.3):
+    assert (1 > threshold > 0)
+    top_bigrams = top1000_bigram['bigram'].tolist()
+
+    aggregate_share, _ = get_median_clusters_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year,
+                                                                      group_by, threshold)
 
     all_mean_and_std = helpers.load_json('../data/all_mean_and_std_{}.json'.format(year))
     stacked_mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}.json'.format(year))
@@ -820,16 +827,15 @@ def bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top10
     combined_bias_df.to_csv(path_or_buf='../results/bias_source_median_{}_std=stacked.csv'.format(year))
 
 
-def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model, top1000_bigram, year, group_by,
-                                                       threshold=0.3):
-    assert (1 > threshold > 0)
-    top_bigrams = top1000_bigram['bigram'].tolist()
-
+def get_within_source_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, group_by, threshold):
     top_bigrams_share_by_month_within_source_tomorrow = []
     total_bigrams_by_month_within_source_tomorrow = []
     top_bigrams_share_by_month_within_source_in_cluster = []
     total_bigrams_by_month_within_source_in_cluster = []
 
+    aggregates = {'within_source_tomorrow': [], 'within_source_in_cluster': []}
+
+    # first get top bigrams shares for all months of the year and also the total count of bigrams for every source
     for month in range(1, 12 + 1):
         bigrams_within_source_tomorrow, bigrams_within_source_in_cluster = \
             get_bigrams_for_within_source_clusters(db_path, dct, tfidf_model, year, month, group_by, threshold)
@@ -870,6 +876,68 @@ def bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model
         total_bigrams_by_month_within_source_in_cluster,
         aggregate_source_count_within_source_in_cluster,
         top_bigrams)
+
+    aggregates['within_source_tomorrow'] = aggregate_share_within_source_tomorrow
+    aggregates['within_source_in_cluster'] = aggregate_share_within_source_in_cluster
+    aggregates['count_within_source_tomorrow'] = aggregate_source_count_within_source_tomorrow
+    aggregates['count_within_source_in_cluster'] = aggregate_source_count_within_source_in_cluster
+
+    return aggregates
+
+
+def bias_within_source_averaged_over_multiple_years(db_path, dct, tfidf_model, top1000_bigram, years, group_by,
+                                                    threshold=0.3):
+    top_bigrams = top1000_bigram['bigram'].tolist()
+
+    aggregate_2015 = get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, 2015, group_by, threshold)
+    aggregate_2016 = get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, 2016, group_by, threshold)
+    aggregate_2017 = get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, 2017, group_by, threshold)
+
+    aggregates = [aggregate_2015, aggregate_2016, aggregate_2017]
+
+    top_bigrams_share_in_cluster = [aggregate['in_cluster'] for aggregate in aggregates]
+    total_bigrams_count_in_cluster = [aggregate['source_count_in_cluster'] for aggregate in aggregates]
+    aggregate_source_count_in_cluster = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+
+    aggregate_share_in_cluster = aggregate_bigrams_month_share(top_bigrams_share_in_cluster,
+                                                               total_bigrams_count_in_cluster,
+                                                               aggregate_source_count_in_cluster,
+                                                               top_bigrams)
+
+    top_bigrams_share_not_in_cluster = [aggregate['not_in_cluster'] for aggregate in aggregates]
+    total_bigrams_count_not_in_cluster = [aggregate['source_count_not_in_cluster'] for aggregate in aggregates]
+    aggregate_source_count_not_in_cluster = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+
+    aggregate_share_not_in_cluster = aggregate_bigrams_month_share(top_bigrams_share_not_in_cluster,
+                                                                   total_bigrams_count_not_in_cluster,
+                                                                   aggregate_source_count_not_in_cluster,
+                                                                   top_bigrams)
+
+    top_bigrams_share_all_articles = [aggregate['all_articles'] for aggregate in aggregates]
+    total_bigrams_count_all_articles = [aggregate['source_count_all_articles'] for aggregate in aggregates]
+    aggregate_source_count_all_articles = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+
+    aggregate_share_all_articles = aggregate_bigrams_month_share(top_bigrams_share_all_articles,
+                                                                 total_bigrams_count_all_articles,
+                                                                 aggregate_source_count_all_articles,
+                                                                 top_bigrams)
+
+    mean_and_std = bigrams.get_mean_and_deviation(aggregate_share_all_articles)
+    helpers.save_json(mean_and_std, '../data/all_mean_and_std_15_17.json')
+
+    mean_and_std = bigrams.get_stacked_mean_and_deviation(aggregate_share_in_cluster, aggregate_share_not_in_cluster)
+    helpers.save_json(mean_and_std, '../data/stacked_mean_and_std_15_17.json')
+
+
+def bias_within_source_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by,
+                                          threshold=0.3):
+    assert (1 > threshold > 0)
+    top_bigrams = top1000_bigram['bigram'].tolist()
+
+    aggregates = get_within_source_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, group_by,
+                                                            threshold)
+    aggregate_share_within_source_tomorrow = aggregates['within_source_tomorrow']
+    aggregate_share_within_source_in_cluster = aggregates['within_source_in_cluster']
 
     all_mean_and_std = helpers.load_json('../data/all_mean_and_std_{}.json'.format(year))
     stacked_mean_and_std = helpers.load_json('../data/stacked_mean_and_std_{}.json'.format(year))
@@ -994,7 +1062,7 @@ def get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, g
     return aggregates
 
 
-def shares_aggregated_across_year(db_path, dct, tfidf_model, top1000_bigram, group_by, threshold=0.3):
+def bias_averaged_over_multiple_years(db_path, dct, tfidf_model, top1000_bigram, years, group_by, threshold=0.3):
     top_bigrams = top1000_bigram['bigram'].tolist()
 
     aggregate_2015 = get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, 2015, group_by, threshold)
@@ -1030,11 +1098,47 @@ def shares_aggregated_across_year(db_path, dct, tfidf_model, top1000_bigram, gro
                                                                  aggregate_source_count_all_articles,
                                                                  top_bigrams)
 
-    mean_and_std = bigrams.get_mean_and_deviation(aggregate_share_all_articles)
-    helpers.save_json(mean_and_std, '../data/all_mean_and_std_15_17.json')
+    top_bigrams_share_in_cluster_tomorrow = [aggregate['in_cluster_tomorrow'] for aggregate in aggregates]
+    total_bigrams_count_in_cluster_tomorrow = [aggregate['source_count_in_cluster_tomorrow'] for aggregate in
+                                               aggregates]
+    aggregate_source_count_in_cluster_tomorrow = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
 
-    mean_and_std = bigrams.get_stacked_mean_and_deviation(aggregate_share_in_cluster, aggregate_share_not_in_cluster)
-    helpers.save_json(mean_and_std, '../data/stacked_mean_and_std_15_17.json')
+    aggregate_share_in_cluster_tomorrow = aggregate_bigrams_month_share(top_bigrams_share_in_cluster_tomorrow,
+                                                                        total_bigrams_count_in_cluster_tomorrow,
+                                                                        aggregate_source_count_in_cluster_tomorrow,
+                                                                        top_bigrams)
+
+    all_mean_and_std = bigrams.get_mean_and_deviation(aggregate_share_all_articles)
+    stacked_mean_and_std = bigrams.get_stacked_mean_and_deviation(aggregate_share_in_cluster,
+                                                                  aggregate_share_not_in_cluster)
+    helpers.save_json(all_mean_and_std, '../data/all_mean_and_std_15_17.json')
+    helpers.save_json(stacked_mean_and_std, '../data/stacked_mean_and_std_15_17.json')
+
+    shares = [aggregate_share_all_articles, aggregate_share_in_cluster, aggregate_share_not_in_cluster,
+              aggregate_share_in_cluster_tomorrow]
+    standardized_shares = standardization_helper(shares, all_mean_and_std, stacked_mean_and_std)
+    flatten_std_shares = (standardized_shares['specific'] + standardized_shares['overall'] +
+                          standardized_shares['stacked'])
+
+    assert (len(flatten_std_shares) == 12)
+
+    print('calculating bias of news source by cluster groups')
+    bias_result = parmap.map(calculate_bias, flatten_std_shares, top1000_bigram, pm_pbar=True)
+
+    assert (len(bias_result) == 12)
+    bias_specific_std = bias_result[0:4]
+    bias_overall_std = bias_result[4:8]
+    bias_stacked_std = bias_result[8:12]
+
+    columns = ['source', 'all_articles', 'in_cluster', 'not_in_cluster', 'in_tomorrows_cluster']
+    combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_specific_std)
+    combined_bias_df.to_csv(path_or_buf='../results/bias_2015_17_std=specific.csv')
+
+    combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_overall_std)
+    combined_bias_df.to_csv(path_or_buf='../results/bias_2015_17_std=all.csv')
+
+    combined_bias_df = _combine_bias_result_for_all_cluster(columns, *bias_stacked_std)
+    combined_bias_df.to_csv(path_or_buf='../results/bias_2015_17_std=stacked.csv')
 
 
 def bias_averaged_over_year(db_path, dct, tfidf_model, top1000_bigram, year, group_by, threshold=0.3):
@@ -1109,7 +1213,7 @@ def main():
     tfidf_model = models.TfidfModel.load(args.tfidf_model)
 
     # other config arguments for bias calculation
-    year = args.year
+    years = sorted(args.years)
     month = args.month
     threshold = args.threshold
     db_path = args.db_path
@@ -1118,27 +1222,40 @@ def main():
     group_by = args.group_by
     bias_type = args.bias_type
 
-    if bias_type == 'standardization_parameters':
-        shares_aggregated_across_year(db_path, dct, tfidf_model, top_1000_bigrams, group_by, threshold)
-    elif bias_type == 'median_groups':
-        if month is None:
-            bias_averaged_over_year_for_median_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by,
+    if len(years) > 1 and month is not None:
+        print('Wrong usage. month cannot be specified with multiple years')
+        return
+
+    if len(years) == 1:
+        year = years[0]
+        if bias_type == 'median_groups':
+            if month is None:
+                bias_median_clusters_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by,
                                                         threshold)
+            else:
+                bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year, month,
+                                                             group_by, threshold)
+        elif bias_type == 'within_source':
+            if month is None:
+                bias_within_source_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year,
+                                                      group_by, threshold)
+            else:
+                bias_averaged_over_month_for_within_source_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year,
+                                                                    month, group_by, threshold)
         else:
-            bias_averaged_over_month_for_median_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year, month,
-                                                         group_by, threshold)
-    elif bias_type == 'within_source':
-        if month is None:
-            bias_averaged_over_year_for_within_source_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year,
-                                                               group_by, threshold)
-        else:
-            bias_averaged_over_month_for_within_source_clusters(db_path, dct, tfidf_model, top_1000_bigrams, year,
-                                                                month, group_by, threshold)
+            if month is None:
+                bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, threshold)
+            else:
+                bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by, threshold)
     else:
-        if month is None:
-            bias_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, year, group_by, threshold=threshold)
+        if bias_type == 'median_groups':
+            bias_median_clusters_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, years, group_by,
+                                                    threshold)
+        elif bias_type == 'within_source':
+            bias_within_source_averaged_over_year(db_path, dct, tfidf_model, top_1000_bigrams, years, group_by,
+                                                  threshold)
         else:
-            bias_averaged_over_month(db_path, dct, tfidf_model, top_1000_bigrams, year, month, group_by, threshold)
+            bias_averaged_over_multiple_years(db_path, dct, tfidf_model, top_1000_bigrams, years, group_by, threshold)
 
 
 if __name__ == '__main__':
