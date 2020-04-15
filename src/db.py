@@ -56,6 +56,9 @@ get_distinct_source_for_month_query = "select distinct(source) from articles whe
 get_count_by_date_and_source_query = ("select source, count(*) as total_articles from articles "
                                       "where year=? and month=? and day=? group by source")
 
+get_count_by_date_and_source_id_query = ("select source_id, count(*) as total_articles from articles "
+                                         "where year=? and month=? and day=? group by source_id")
+
 update_article_topic = ("update articles set topic=? where source_id=? and day=? and month=? and year=? "
                         "and program_name=?")
 
@@ -157,6 +160,12 @@ class NewsDb:
     def get_count_of_articles_for_date_by_source(self, dt):
         cur = self.conn.cursor()
         cur.execute(get_count_by_date_and_source_query, (dt.year, dt.month, dt.day))
+
+        return cur.fetchall()
+
+    def get_count_of_articles_for_date_by_source_id(self, dt):
+        cur = self.conn.cursor()
+        cur.execute(get_count_by_date_and_source_id_query, (dt.year, dt.month, dt.day))
 
         return cur.fetchall()
 
