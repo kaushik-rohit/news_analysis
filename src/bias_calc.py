@@ -1056,7 +1056,7 @@ def get_aggregate_share_for_year(db_path, dct, tfidf_model, top_bigrams, year, g
     aggregates['all_articles'] = aggregate_share_all_articles
     aggregates['source_count_in_cluster'] = aggregate_source_count_in_cluster
     aggregates['source_count_not_in_cluster'] = aggregate_source_count_not_in_cluster
-    aggregates['source_count_in_tomorrow_cluster'] = aggregate_source_count_in_cluster_tomorrow
+    aggregates['source_count_in_cluster_tomorrow'] = aggregate_source_count_in_cluster_tomorrow
     aggregates['source_count_all_articles'] = aggregate_source_count_all_articles
 
     return aggregates
