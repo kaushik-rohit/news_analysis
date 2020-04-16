@@ -118,6 +118,26 @@ def check_not_subset(indices1, indices2):
     return False
 
 
+def get_similarities(articles1, articles2, dct, tfidf_model):
+    """
+    Return similarity of each article from articles1 to each article from articles2
+    :param articles1:
+    :param articles2:
+    :param dct:
+    :param tfidf_model:
+    :return:
+    """
+    similarity_ret = []
+    filter_fn = helpers.preprocess_text
+    index = MatrixSimilarity(tfidf_model[list(iter(BoWIter(dct, articles2, filter_fn)))], num_features=len(dct))
+    articles1_vec = tfidf_model[iter(BoWIter(dct, articles1, filter_fn))]
+
+    for idx, similarities in enumerate(index[articles1_vec]):
+        similarities = np.array(similarities)
+        similarity_ret.append((idx, similarities))
+    return similarity_ret
+
+
 def get_similar_articles(articles1, articles2, dct, tfidf_model, threshold=0.3, diff_source=True):
     """
     The method returns all the articles from articles1 which have atleast one
@@ -379,6 +399,37 @@ def get_within_source_cluster_of_articles(path, dct, tfidf_model, year, month, t
         within_source_in_cluster = helpers.combine_two_dictionary(within_source_in_cluster, stat[1])
 
     return within_source_tomorrow_cluster, within_source_in_cluster
+
+
+def get_cluster_for_the_day_with_tomorrows_articles(curr_date, path, dct, tfidf_model, threshold):
+    """
+    """
+    delta = timedelta(days=1)
+    next_date = curr_date + delta
+    conn = db.NewsDb(path)
+
+    print('calculating clusters for {}'.format(curr_date))
+
+    articles_day1 = list(conn.select_articles_by_date(curr_date))
+    articles_day2 = list(conn.select_articles_by_date(next_date))
+
+    conn.close()
+    unclustered_articles_indices = get_articles_not_in_cluster(articles_day1, dct, tfidf_model, threshold=threshold)
+    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
+    clustered_articles = [articles_day1[i] for i in range(len(articles_day1)) if i not in unclustered_articles_indices]
+    unclustered_articles_indices_in_day2_cluster = get_similar_articles(unclustered_articles, articles_day2, dct,
+                                                                        tfidf_model, threshold=threshold)
+
+    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
+                                            unclustered_articles_indices_in_day2_cluster]
+
+    tomorrows_articles = []
+    for i, indices in unclustered_articles_indices_in_day2_cluster:
+
+        for idx in indices:
+            tomorrows_articles += [articles_day2[idx]]
+
+    return clustered_articles, unclustered_articles, unclustered_articles_in_day2_cluster, tomorrows_articles
 
 
 def get_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
