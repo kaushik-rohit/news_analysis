@@ -1082,7 +1082,7 @@ def bias_averaged_over_multiple_years(db_path, dct, tfidf_model, top1000_bigram,
 
     top_bigrams_share_not_in_cluster = [aggregate['not_in_cluster'] for aggregate in aggregates]
     total_bigrams_count_not_in_cluster = [aggregate['source_count_not_in_cluster'] for aggregate in aggregates]
-    aggregate_source_count_not_in_cluster = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+    aggregate_source_count_not_in_cluster = aggregate_bigrams_month_count(total_bigrams_count_not_in_cluster)
 
     aggregate_share_not_in_cluster = aggregate_bigrams_month_share(top_bigrams_share_not_in_cluster,
                                                                    total_bigrams_count_not_in_cluster,
@@ -1091,7 +1091,7 @@ def bias_averaged_over_multiple_years(db_path, dct, tfidf_model, top1000_bigram,
 
     top_bigrams_share_all_articles = [aggregate['all_articles'] for aggregate in aggregates]
     total_bigrams_count_all_articles = [aggregate['source_count_all_articles'] for aggregate in aggregates]
-    aggregate_source_count_all_articles = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+    aggregate_source_count_all_articles = aggregate_bigrams_month_count(total_bigrams_count_all_articles)
 
     aggregate_share_all_articles = aggregate_bigrams_month_share(top_bigrams_share_all_articles,
                                                                  total_bigrams_count_all_articles,
@@ -1101,7 +1101,7 @@ def bias_averaged_over_multiple_years(db_path, dct, tfidf_model, top1000_bigram,
     top_bigrams_share_in_cluster_tomorrow = [aggregate['in_cluster_tomorrow'] for aggregate in aggregates]
     total_bigrams_count_in_cluster_tomorrow = [aggregate['source_count_in_cluster_tomorrow'] for aggregate in
                                                aggregates]
-    aggregate_source_count_in_cluster_tomorrow = aggregate_bigrams_month_count(total_bigrams_count_in_cluster)
+    aggregate_source_count_in_cluster_tomorrow = aggregate_bigrams_month_count(total_bigrams_count_in_cluster_tomorrow)
 
     aggregate_share_in_cluster_tomorrow = aggregate_bigrams_month_share(top_bigrams_share_in_cluster_tomorrow,
                                                                         total_bigrams_count_in_cluster_tomorrow,
