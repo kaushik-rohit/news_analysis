@@ -522,45 +522,6 @@ def get_cluster_of_articles(path, dct, tfidf_model, year, month, threshold):
     return in_cluster_articles, not_in_cluster_articles, not_in_cluster_but_next_day_cluster
 
 
-def get_no_copy_cluster_for_the_day(curr_date, path, dct, tfidf_model, threshold):
-    """
-    :param curr_date:
-    :param path:
-    :param dct:
-    :param tfidf_model:
-    :param threshold:
-    :return:
-    """
-    delta = timedelta(days=1)
-    prev_date = curr_date - delta
-    conn = db.NewsDb(path)
-
-    print('calculating clusters for {}'.format(curr_date))
-
-    articles_today = list(conn.select_articles_by_date(curr_date))
-    articles_prev_day = list(conn.select_articles_by_date(prev_date))
-    conn.close()
-
-    copying_articles_indices = get_similar_articles(articles_prev_day, articles_today, dct, tfidf_model,
-                                                    threshold=threshold)
-    unique_copying_todays_article = []
-
-    for i, indices in copying_articles_indices:
-        unique_copying_todays_article += indices
-
-    unique_copying_todays_article = list(set(unique_copying_todays_article))
-
-    articles_today_with_no_copy = list(np.delete(articles_today, unique_copying_todays_article))
-
-    unclustered_articles_indices = get_articles_not_in_cluster(articles_today_with_no_copy, dct, tfidf_model,
-                                                               threshold=threshold)
-    unclustered_articles = [articles_today_with_no_copy[i] for i in unclustered_articles_indices]
-    clustered_articles = [articles_today_with_no_copy[i] for i in range(len(articles_today_with_no_copy))
-                          if i not in unclustered_articles_indices]
-
-    return clustered_articles, unclustered_articles
-
-
 def get_cluster_of_non_copy_articles(path, dct, tfidf_model, year, month, threshold):
     """
     Get cluster of articles which are not reported next day.
@@ -579,19 +540,31 @@ def get_cluster_of_non_copy_articles(path, dct, tfidf_model, year, month, thresh
 
     in_cluster_articles = []
     not_in_cluster_articles = []
+    tomorrow_articles = []
 
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
     print('calculating clusters for {} {}'.format(year, calendar.month_name[month]))
     pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    stats = pool.starmap(get_no_copy_cluster_for_the_day, [(curr_date, path, dct, tfidf_model, threshold)
-                                                           for curr_date in date_range])
+    stats = pool.starmap(
+        get_cluster_for_the_day_with_tomorrows_articles,
+        [(curr_date, path, dct, tfidf_model, threshold) for curr_date in date_range]
+    )
     pool.close()
 
     for stat in stats:
         in_cluster_articles += stat[0]
         not_in_cluster_articles += stat[1]
+        tomorrow_articles += stat[3]
 
-    return in_cluster_articles, not_in_cluster_articles
+    # remove tomorrow articles from in cluster and not in cluster articles
+    in_cluster_articles_no_copy = [
+        article for article in in_cluster_articles if article not in tomorrow_articles
+    ]
+
+    not_in_cluster_articles_no_copy = [
+        article for article in not_in_cluster_articles if article not in tomorrow_articles
+    ]
+    return in_cluster_articles_no_copy, not_in_cluster_articles_no_copy
 
 
 def get_cluster_of_articles_group_by_median_for_date(curr_date, path, dct, tfidf_model, overall_medians, source_medians,
