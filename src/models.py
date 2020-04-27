@@ -1,5 +1,3 @@
-
-
 class Article:
 
     def __init__(self, source_id, source, date, program_name, transcript, topic):
@@ -14,6 +12,15 @@ class Article:
     def __str__(self):
         return 'article id: {}, name: {}, date: {}, program_name: {}'.format(self.source_id, self.source, self.date,
                                                                              self.program_name)
+
+    def __eq__(self, other):
+        if isinstance(other, Article):
+            return ((self.source == other.source and
+                     self.source_id == other.source_id and
+                     self.date == other.date and
+                     self.program_name == other.program_name))
+        else:
+            return False
 
     def equals(self, article):
         if (self.source == article.source and
@@ -64,6 +71,8 @@ class BoWIter(object):
         for doc in self.docs:
             if self.preprocess_fn is None:
                 bow = self.dict.doc2bow(doc)
+            elif self.bigram is None:
+                bow = self.dict.doc2bow(self.preprocess_fn(doc.transcript))
             else:
                 bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.transcript)])
 
