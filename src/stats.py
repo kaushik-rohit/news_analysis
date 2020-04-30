@@ -212,32 +212,48 @@ def get_maximum_similarities_of_articles_by_source(curr_date, path, dct, tfidf_m
     unclustered_articles_indices = cluster_analysis.get_articles_not_in_cluster(articles_day1, dct, tfidf_model,
                                                                                 threshold=threshold)
     unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
-    unclustered_articles_indices_in_day2_cluster = cluster_analysis.get_similar_articles(unclustered_articles,
-                                                                                         articles_day2, dct,
-                                                                                         tfidf_model, threshold)
 
-    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
-                                            unclustered_articles_indices_in_day2_cluster]
+    mask = {}
+    for i in range(len(unclustered_articles_indices)):
+        mask[i] = [unclustered_articles_indices[i]]
 
-    similarities = cluster_analysis.get_similarities(unclustered_articles_in_day2_cluster, articles_day2, dct,
-                                                     tfidf_model)
+    similarities_with_tomorrow_articles = cluster_analysis.get_similarities(unclustered_articles, articles_day2, dct,
+                                                                            tfidf_model)
+    similarities_with_today_articles = cluster_analysis.get_similarities(unclustered_articles, articles_day1, dct,
+                                                                         tfidf_model, mask)
 
-    for idx, sim in similarities:
-        max_similarity_by_source = {source: 0 for source in helpers.source_names}
-        assert (len(sim) == len(articles_day2))
-        article = unclustered_articles_in_day2_cluster[idx]
-        for i in range(len(sim)):
-            source = articles_day2[i].source
-            max_similarity_by_source[source] = max(max_similarity_by_source[source], sim[i])
+    assert(len(similarities_with_tomorrow_articles) == len(unclustered_articles))
+    assert(len(similarities_with_tomorrow_articles[0]) == len(articles_day2))
+    assert(len(similarities_with_today_articles) == len(unclustered_articles))
+    assert(len(similarities_with_today_articles[0]) == len(articles_day1))
+
+    for i in range(len(unclustered_articles)):
+        article = unclustered_articles[i]
+        sim_tomorrow = similarities_with_tomorrow_articles[i]
+        sim_today = similarities_with_today_articles[i]
+        max_sim_tomorrow_by_source = {source: 0 for source in helpers.source_names}
+        max_sim_today_by_source = {source: 0 for source in helpers.source_names}
+
+        assert (len(sim_tomorrow) == len(articles_day2))
+        assert (len(sim_today) == len(articles_day1))
+
+        for j in range(len(sim_tomorrow)):
+            source = articles_day2[j].source
+            max_sim_tomorrow_by_source[source] = max(max_sim_tomorrow_by_source[source], sim_tomorrow[j])
+
+        for j in range(len(sim_today)):
+            source = articles_day1[j].source
+            max_sim_today_by_source[source] = max(max_sim_today_by_source[source], sim_today[j])
 
         row = [curr_date, article.source, article.program_name]
-        row += [max_similarity_by_source[source] for source in helpers.source_names]
+        row += [max_sim_today_by_source[source] for source in helpers.source_names]
+        row += [max_sim_tomorrow_by_source[source] for source in helpers.source_names]
         rows += [row]
 
     return rows
 
 
-def calculate_tomorrow_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold):
+def calculate_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold):
     start_date = date(year, month, 1)
     end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
@@ -253,71 +269,11 @@ def calculate_tomorrow_similarity_statistics(db_path, dct, tfidf_model, year, mo
     for stat in stats:
         rows += stat
 
-    columns = ['date', 'source', 'program'] + [source for source in helpers.source_names]
+    columns = ['date', 'source', 'program'] + ['{}_today'.format(source) for source in helpers.source_names]
+    columns += ['{}_tomorrow'.format(source) for source in helpers.source_names]
+
     df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(path_or_buf='../results/tomorrow_articles_similarity_by_source.csv')
-
-
-def get_maximum_similarities_of_in_cluster_articles_by_source(curr_date, path, dct, tfidf_model, threshold):
-    delta = timedelta(days=1)
-    next_date = curr_date + delta
-    conn = db.NewsDb(path)
-
-    rows = []
-
-    print('calculating clusters for {}'.format(curr_date))
-
-    articles_day1 = list(conn.select_articles_by_date(curr_date))
-    articles_day2 = list(conn.select_articles_by_date(next_date))
-
-    conn.close()
-    unclustered_articles_indices = cluster_analysis.get_articles_not_in_cluster(articles_day1, dct, tfidf_model,
-                                                                                threshold=threshold)
-    unclustered_articles = [articles_day1[i] for i in unclustered_articles_indices]
-    unclustered_articles_indices_in_day2_cluster = cluster_analysis.get_similar_articles(unclustered_articles,
-                                                                                         articles_day2, dct,
-                                                                                         tfidf_model, threshold)
-
-    unclustered_articles_in_day2_cluster = [unclustered_articles[i] for i, idx in
-                                            unclustered_articles_indices_in_day2_cluster]
-
-    similarities = cluster_analysis.get_similarities(unclustered_articles, articles_day2, dct,
-                                                     tfidf_model)
-
-    for idx, sim in similarities:
-        max_similarity_by_source = {source: 0 for source in helpers.source_names}
-        assert (len(sim) == len(articles_day2))
-        article = unclustered_articles[idx]
-        for i in range(len(sim)):
-            source = articles_day2[i].source
-            max_similarity_by_source[source] = max(max_similarity_by_source[source], sim[i])
-
-        row = [curr_date, article.source, article.program_name]
-        row += [max_similarity_by_source[source] for source in helpers.source_names]
-        rows += [row]
-
-    return rows
-
-
-def calculate_not_in_cluster_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold):
-    start_date = date(year, month, 1)
-    end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
-    date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
-
-    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
-    rows = []
-
-    stats = pool.starmap(get_maximum_similarities_of_in_cluster_articles_by_source, [(curr_date, db_path, dct,
-                                                                                      tfidf_model, threshold)
-                                                                                     for curr_date in
-                                                                                     date_range])
-
-    for stat in stats:
-        rows += stat
-
-    columns = ['date', 'source', 'program'] + [source for source in helpers.source_names]
-    df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(path_or_buf='../results/stats_in_cluster_articles_similarity_by_source.csv')
+    df.to_csv(path_or_buf='../results/articles_similarity_by_source.csv')
 
 
 def main():
@@ -330,7 +286,7 @@ def main():
     threshold = args.threshold
     db_path = args.db_path
 
-    calculate_not_in_cluster_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold)
+    calculate_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold)
     # calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, month, threshold)
     # calculate_tomorrow_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold)
 

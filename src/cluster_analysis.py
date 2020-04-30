@@ -118,9 +118,11 @@ def check_not_subset(indices1, indices2):
     return False
 
 
-def get_similarities(articles1, articles2, dct, tfidf_model):
+def get_similarities(articles1, articles2, dct, tfidf_model, mask=None):
     """
     Return similarity of each article from articles1 to each article from articles2
+    :param mask: mask, if some articles should be compared, a mapping of id (articles1) to list of ids(articles2)
+    which are not to be compared.
     :param articles1:
     :param articles2:
     :param dct:
@@ -134,7 +136,12 @@ def get_similarities(articles1, articles2, dct, tfidf_model):
 
     for idx, similarities in enumerate(index[articles1_vec]):
         similarities = np.array(similarities)
-        similarity_ret.append((idx, similarities))
+
+        if mask is not None and idx in mask:
+            for mask_pos in mask:
+                similarities[mask_pos] = 0
+
+        similarity_ret.append(similarities)
     return similarity_ret
 
 
