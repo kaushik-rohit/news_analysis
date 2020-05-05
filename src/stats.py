@@ -170,6 +170,8 @@ def calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, mont
                                                                                              tfidf_model, threshold)
                                                                                             for curr_date in
                                                                                             date_range])
+    pool.close()
+
     assert (len(stats) == len(date_range))
     in_tomorrows_cluster_map = {}
     tomorrows_article_in_tomorrows_cluster_map = {}
@@ -253,18 +255,20 @@ def get_maximum_similarities_of_articles_by_source(curr_date, path, dct, tfidf_m
     return rows
 
 
-def calculate_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold):
+def calculate_similarity_statistics_for_month(db_path, dct, tfidf_model, year, month, threshold):
     start_date = date(year, month, 1)
     end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
     date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
 
-    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
     rows = []
+
+    pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
 
     stats = pool.starmap(get_maximum_similarities_of_articles_by_source, [(curr_date, db_path, dct,
                                                                            tfidf_model, threshold)
                                                                           for curr_date in
                                                                           date_range])
+    pool.close()
 
     for stat in stats:
         rows += stat
@@ -274,6 +278,32 @@ def calculate_similarity_statistics(db_path, dct, tfidf_model, year, month, thre
 
     df = pd.DataFrame(rows, columns=columns)
     df.to_csv(path_or_buf='../results/articles_similarity_by_source.csv')
+
+
+def calculate_similarity_statistics_for_year(db_path, dct, tfidf_model, year, threshold):
+    rows = []
+
+    for month in range(1, 12 + 1):
+        start_date = date(year, month, 1)
+        end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+        date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+
+        pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+
+        stats = pool.starmap(get_maximum_similarities_of_articles_by_source, [(curr_date, db_path, dct,
+                                                                               tfidf_model, threshold)
+                                                                              for curr_date in
+                                                                              date_range])
+        pool.close()
+
+        for stat in stats:
+            rows += stat
+
+    columns = ['date', 'source', 'program'] + ['{}_today'.format(source) for source in helpers.source_names]
+    columns += ['{}_tomorrow'.format(source) for source in helpers.source_names]
+
+    df = pd.DataFrame(rows, columns=columns)
+    df.to_csv(path_or_buf='../results/articles_similarity_by_source_{}.csv'.format(year))
 
 
 def main():
@@ -286,9 +316,12 @@ def main():
     threshold = args.threshold
     db_path = args.db_path
 
-    calculate_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold)
+    if month is None:
+        calculate_similarity_statistics_for_year(db_path, dct, tfidf_model, year, threshold)
+    else:
+        calculate_similarity_statistics_for_month(db_path, dct, tfidf_model, year, month, threshold)
+
     # calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, month, threshold)
-    # calculate_tomorrow_similarity_statistics(db_path, dct, tfidf_model, year, month, threshold)
 
 
 if __name__ == '__main__':
