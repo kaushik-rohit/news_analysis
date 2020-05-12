@@ -198,6 +198,56 @@ def calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, mont
     df.to_csv(path_or_buf='../results/stats_tomorrows_article_source_id.csv')
 
 
+def calculate_tomorrows_cluster_statistics_for_year(db_path, dct, tfidf_model, year, threshold):
+    rows_source_name1 = []
+    rows_source_id1 = []
+    rows_source_name2 = []
+    rows_source_id2 = []
+
+    for month in range(1, 12 + 1):
+        start_date = date(year, month, 1)
+        end_date = date(year, month, calendar.monthrange(year, month)[1])  # calendar.monthrange(year, month)[1]
+        date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+
+        pool = mp.Pool(mp.cpu_count())  # calculate stats for date in parallel
+        stats = pool.starmap(cluster_analysis.get_cluster_for_the_day_with_tomorrows_articles, [(curr_date, db_path, dct,
+                                                                                                 tfidf_model, threshold)
+                                                                                                for curr_date in
+                                                                                                date_range])
+        pool.close()
+
+        assert (len(stats) == len(date_range))
+        in_tomorrows_cluster_map = {}
+        tomorrows_article_in_tomorrows_cluster_map = {}
+
+        for i in range(len(date_range)):
+            in_tomorrows_cluster_map[date_range[i]] = stats[i][2]
+            tomorrows_article_in_tomorrows_cluster_map[date_range[i]] = stats[i][3]
+
+        # save results to csv
+        rows_source_name, rows_source_id = format_in_tomorrows_cluster_results_into_rows(db_path, date_range,
+                                                                                         in_tomorrows_cluster_map)
+        rows_source_name1 += rows_source_name
+        rows_source_id1 += rows_source_id
+
+        rows_source_name, rows_source_id = format_results_into_rows(db_path, date_range,
+                                                                    tomorrows_article_in_tomorrows_cluster_map)
+        rows_source_name2 += rows_source_name
+        rows_source_id2 += rows_source_id
+
+    df = pd.DataFrame(rows_source_name1)
+    df.to_csv(path_or_buf='../results/stats_in_tomorrows_cluster_source_name_{}.csv'.format(year))
+
+    df = pd.DataFrame(rows_source_id1)
+    df.to_csv(path_or_buf='../results/stats_in_tomorrows_cluster_source_id_{}.csv'.format(year))
+
+    df = pd.DataFrame(rows_source_name2)
+    df.to_csv(path_or_buf='../results/stats_tomorrows_articles_source_name_{}.csv'.format(year))
+
+    df = pd.DataFrame(rows_source_id2)
+    df.to_csv(path_or_buf='../results/stats_tomorrows_article_source_id_{}.csv'.format(year))
+
+
 def get_maximum_similarities_of_articles_by_source(curr_date, path, dct, tfidf_model, threshold):
     delta = timedelta(days=1)
     next_date = curr_date + delta
@@ -317,11 +367,11 @@ def main():
     db_path = args.db_path
 
     if month is None:
-        calculate_similarity_statistics_for_year(db_path, dct, tfidf_model, year, threshold)
+        # calculate_similarity_statistics_for_year(db_path, dct, tfidf_model, year, threshold)
+        calculate_tomorrows_cluster_statistics_for_year(db_path, dct, tfidf_model, year, threshold)
     else:
         calculate_similarity_statistics_for_month(db_path, dct, tfidf_model, year, month, threshold)
-
-    # calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, month, threshold)
+        calculate_tomorrows_cluster_statistics(db_path, dct, tfidf_model, year, month, threshold)
 
 
 if __name__ == '__main__':
