@@ -1,11 +1,11 @@
-from cluster_analysis import get_similar_articles, get_articles_not_in_cluster
+from clustering.cluster_analysis import get_similar_articles, get_articles_not_in_cluster
 from datetime import date, timedelta
 import multiprocessing as mp
 from gensim import models, corpora
 import calendar
 import pandas as pd
 import argparse
-import db
+from shared import db
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()

@@ -1,12 +1,11 @@
 from datetime import date, timedelta
 from gensim import corpora, models
 import multiprocessing as mp
-import cluster_analysis
+from clustering import cluster_analysis
 import pandas as pd
-import helpers
+from shared import helpers, db
 import argparse
 import calendar
-import db
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()

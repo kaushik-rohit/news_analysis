@@ -6,7 +6,7 @@ from collections import Counter
 import pandas as pd
 import string
 import parmap
-import helpers
+from shared import helpers
 
 porter = PorterStemmer()
 

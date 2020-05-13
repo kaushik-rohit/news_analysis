@@ -8,7 +8,7 @@ import pandas as pd
 from copy import copy
 import os
 import json
-import db
+from shared import db
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
@@ -252,7 +252,7 @@ def flatten(list_of_lists):
 
 def remove_stemmed_phrases(s):
     STOPWORDS = []
-    phrases = pd.read_csv('../data/alpha_betas_party.csv')['bigram'].tolist()
+    phrases = pd.read_csv('../../data/alpha_betas_party.csv')['bigram'].tolist()
 
     for phrase in phrases:
         STOPWORDS.extend(phrase.split('_'))

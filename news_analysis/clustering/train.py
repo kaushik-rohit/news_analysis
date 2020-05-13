@@ -1,10 +1,9 @@
 import argparse
 from gensim import models
 from gensim import corpora
-import db
 import os
-import helpers
-from models import BoWIter, CorpusIter
+from shared import helpers, db
+from shared.models import BoWIter, CorpusIter
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()

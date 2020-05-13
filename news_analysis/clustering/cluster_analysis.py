@@ -6,9 +6,7 @@ import argparse
 import numpy as np
 import calendar
 import pandas as pd
-import db
-from models import *
-import helpers
+from shared import helpers, db
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()

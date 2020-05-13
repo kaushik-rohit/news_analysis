@@ -1,8 +1,8 @@
 import sqlite3
 from sqlite3 import Error
-from models import Article, Topic
+from shared.models import Article
 from datetime import date
-import helpers
+from shared import helpers
 
 # create queries
 create_articles_table_query = ("create table if not exists articles "
@@ -63,7 +63,7 @@ update_article_topic = ("update articles set topic=? where source_id=? and day=?
                         "and program_name=?")
 
 # select topics queries
-select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where topic=? "
+select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where id=? "
                                 "group by id, topic, bigram order by freq desc limit ?")
 
 select_top_bigrams = "select bigram, sum(frequency) as freq from topics group by bigram order by freq desc limit ?"
@@ -228,14 +228,14 @@ class NewsDb:
         return bigrams_freq
 
     def select_n_top_bigrams_from_each_topic(self, top_n):
-        bigrams = []
+        bigrams = {helpers.topics_id_to_name_map[topic]: [] for topic in helpers.topics_id}
         for topic in helpers.topics_id:
             cur = self.conn.cursor()
             cur.execute(select_top_bigrams_for_topic, (topic, top_n, ))
             rows = cur.fetchall()
 
             for row in rows:
-                bigrams += [row[0]]
+                bigrams[helpers.topics_id_to_name_map[topic]] += [row[0]]
         return bigrams
 
     def _get_connection(self, path):
