@@ -1,15 +1,17 @@
 import argparse
-from datetime import date, timedelta
 import calendar
-from shared.models import CorpusIter, BoWIter
+import os
+from datetime import date, timedelta
+
+import numpy as np
 from gensim import corpora, models
 from gensim.corpora.mmcorpus import MmCorpus
-from gensim.similarities import MatrixSimilarity
 from gensim.models.phrases import Phrases, Phraser
+from gensim.similarities import MatrixSimilarity
+
 from clustering import bigrams
 from shared import helpers, db
-import numpy as np
-import os
+from shared.models import CorpusIter, BoWIter
 
 # define necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -42,57 +44,7 @@ parser.add_argument('-t', '--threshold',
                     type=float,
                     default=0.1,
                     help='')
-
-
-
-
-
-
-class LDA:
-    def __init__(self, db_path, models_path):
-        self.db_path = db_path
-        self.models_path = models_path
-
-    @staticmethod
-    def get_bigram_model_lda(articles):
-        preprocess_fn = helpers.preprocess_text_for_lda
-        corpus = CorpusIter(articles, preprocess_fn)
-        phrases = Phrases(corpus, min_count=1, threshold=1)
-        bigram = Phraser(phrases)
-        return bigram
-
-    @staticmethod
-    def assign_topics_to_articles_for_month(year, month):
-        conn = db.NewsDb(db_path)
-
-        print('getting articles')
-        preprocess_fn = helpers.preprocess_text_for_lda
-        articles = list(conn.select_articles_by_year_and_month(year, month))
-        corpus = CorpusIter(articles, preprocess_fn)
-
-        print('get bigram model')
-        bigram = get_bigram_model_lda(articles)
-        bigram_corpus = bigram[iter(corpus)]
-
-        print('building dictionary')
-        dictionary = corpora.Dictionary(bigram_corpus)
-        dictionary.filter_extremes(no_below=10, no_above=0.4)
-        print('size of vocab: {}'.format(len(dictionary)))
-
-        bow_articles = list(iter(BoWIter(dictionary, articles, preprocess_fn, bigram)))
-
-        print('training lda')
-        lda_model = models.ldamulticore.LdaMulticore(corpus=bow_articles,
-                                                     id2word=dictionary,
-                                                     num_topics=20)
-
-        print(lda_model.print_topics())
-
-        print(lda_model[bow_articles[0]])
-        lda_model.save('../models/lda_{}_{}'.format(year, month))
-        conn.close()
-
-
+                    
 class TFIDF:
     def __init__(self, db_path):
         self.db_path = db_path
