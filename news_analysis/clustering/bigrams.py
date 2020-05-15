@@ -1,11 +1,13 @@
 import itertools
-import nltk
-from nltk.stem import PorterStemmer
-from nltk.corpus import stopwords
-from collections import Counter
-import pandas as pd
 import string
+from collections import Counter
+
+import nltk
+import pandas as pd
 import parmap
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+
 from shared import helpers
 
 porter = PorterStemmer()

@@ -1,7 +1,9 @@
 import argparse
-from gensim import models
-from gensim import corpora
 import os
+
+from gensim import corpora
+from gensim import models
+
 from shared import helpers, db
 from shared.models import BoWIter, CorpusIter
 

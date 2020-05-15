@@ -1,12 +1,14 @@
 import argparse
-import pandas as pd
-from gensim import corpora, models
-import parmap
-from tqdm import tqdm
 import copy
+
 import numpy as np
-from shared import helpers, db
+import pandas as pd
+import parmap
+from gensim import corpora, models
+from tqdm import tqdm
+
 from clustering import bigrams, cluster_analysis
+from shared import helpers, db
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()

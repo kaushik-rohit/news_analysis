@@ -1,11 +1,13 @@
+import argparse
+import calendar
+import multiprocessing as mp
 from datetime import date, timedelta
+
+import numpy as np
+import pandas as pd
 from gensim import models, corpora
 from gensim.similarities import MatrixSimilarity
-import multiprocessing as mp
-import argparse
-import numpy as np
-import calendar
-import pandas as pd
+
 from shared import helpers, db
 
 # create necessary arguments to run the analysis
