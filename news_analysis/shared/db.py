@@ -1,8 +1,9 @@
 import sqlite3
-from sqlite3 import Error
-from shared.models import Article
 from datetime import date
+from sqlite3 import Error
+
 from shared import helpers
+from shared.models import Article
 
 # create queries
 create_articles_table_query = ("create table if not exists articles "

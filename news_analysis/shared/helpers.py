@@ -1,13 +1,15 @@
+import json
+import os
+import pickle
+from copy import copy
+
+import pandas as pd
+from dateutil import parser as date_parser
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation
 from gensim.parsing.preprocessing import remove_stopwords, stem_text, strip_non_alphanum, strip_multiple_whitespaces
 from gensim.parsing.preprocessing import strip_short, strip_numeric
 from gensim.utils import lemmatize
-from dateutil import parser as date_parser
-import pickle
-import pandas as pd
-from copy import copy
-import os
-import json
+
 from shared import db
 
 months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -80,6 +82,29 @@ topics_id_to_name_map = {
     '21': 'Transport'
 }
 
+topics_index_to_name_map = {
+    '0': 'Agriculture, animals, food and rural affairs',
+    '1': 'Asylum, immigration and nationality',
+    '2': 'Business, industry and consumers',
+    '3': 'Communities and families',
+    '4': 'Crime, civil law, justice and rights',
+    '5': 'Culture, media and sport',
+    '6': 'Defence',
+    '7': 'Economy and finance',
+    '8': 'Education',
+    '9': 'Employment and training',
+    '10': 'Energy and environment',
+    '11': 'European Union',
+    '12': 'Health services and medicine',
+    '13': 'Housing and planning',
+    '14': 'International affairs',
+    '15': 'Parliament, government and politics',
+    '16': 'Science and technology',
+    '17': 'Social security and pensions',
+    '18': 'Social services',
+    '19': 'Transport'
+}
+
 
 def lemma(text):
     out = [wd.decode('utf-8').split('/')[0] for wd in lemmatize(text)]
@@ -125,9 +150,13 @@ def preprocess_text(text):
     return preprocess_string(text, CLUSTER_FILTERS)
 
 
+def strip_short2(text):
+    return strip_short(text, minsize=4)
+
+
 def preprocess_text_for_lda(text):
     LDA_FILTERS = [lambda x: x.lower(), strip_multiple_whitespaces, strip_tags, strip_punctuation, remove_stopwords,
-                   strip_short, strip_non_alphanum, strip_numeric]
+                   strip_short2, strip_non_alphanum, strip_numeric]
     return preprocess_string(text, LDA_FILTERS)
 
 
