@@ -33,36 +33,42 @@ parser.add_argument('-dict', '--dictionary',
 
 parser.add_argument('-p', '--phraser',
                     type=str,
-                    required=True,
-                    help='the path to gensim bigram/phraser model')
+                    default='None',
+                    help='the path to gensim bigram/phraser model. only required when training lda')
 
 parser.add_argument('-tp', '--topics-prior',
                     type=str,
-                    help='the path to expected topics bigrams')
+                    help='the path to expected topics bigrams. only required when training lda')
+
+parser.add_argument('--mallet-path',
+                    type=str,
+                    default='~/Mallet/bin/mallet',
+                    help='the path to mallet binary. only required when training lda using mallet implementation')
 
 parser.add_argument('-t', '--type',
                     type=str,
-                    choices=['dict', 'lda'],
+                    choices=['dict', 'lda', 'lda-mallet'],
                     required=True,
                     help='build the dictionary or train lda')
 
 
 def build_phrase(docs, out, name):
-    corpus = CorpusIter(docs, helpers.preprocess_text_for_lda)
-    # phrases = Phrases(iter(corpus), min_count=1, threshold=0.5, scoring='npmi')
-    # print(phrases.vocab)
+    print('identifying phrases')
+    corpus = list(iter(CorpusIter(docs, helpers.preprocess_text_for_lda)))
+    bigram_model = Phrases(corpus, min_count=1, threshold=0.5)
+    print(bigram_model.vocab)
     print('bigram model built!!')
     print('now computing the dictionary')
-    dictionary = corpora.Dictionary(iter(corpus))
-    dictionary.filter_extremes(no_above=0.40, no_below=10)
+    dictionary = corpora.Dictionary(bigram_model[corpus])
+    dictionary.filter_extremes(no_above=0.40, no_below=3)
     dictionary.save(os.path.join(out, 'topics_vocab_{}.dict'.format(name)))
 
-    # bigram = Phraser(phrases)
-    # bigram.save(os.path.join(out, "bigram_{}.pkl".format(name)))
+    bigram = Phraser(bigram_model)
+    bigram.save(os.path.join(out, "bigram_{}.pkl".format(name)))
 
 
 def create_eta(priors, etadict, ntopics):
-    eta = np.full(shape=(ntopics, len(etadict)), fill_value=1)  # create a (ntopics, nterms) matrix and fill with 1
+    eta = np.full(shape=(ntopics, len(etadict)), fill_value=0.1)  # create a (ntopics, nterms) matrix and fill with 1
     for word, topic in priors.items():  # for each word in the list of priors
         keyindex = [index for index, term in etadict.items() if term == word]  # look up the word in the dictionary
 
@@ -86,15 +92,16 @@ def viz_model(model, modeldict):
     plt.savefig('./lda_results.png')
 
 
-def train_lda(docs, priors, dictionary, out, name):
+def train_lda(docs, priors, dictionary, bigram_model, out, name):
     filter_fn = helpers.preprocess_text_for_lda
 
     print('converting corpus into bag of words')
-    bow_articles = list(iter(BoWIter(dictionary, docs, filter_fn)))
+    bow_articles = list(iter(BoWIter(dictionary, docs, filter_fn, bigram=bigram_model)))
     print('training lda')
     eta = create_eta(priors, dictionary, 20)
     lda_model = models.ldamulticore.LdaMulticore(corpus=bow_articles,
                                                  id2word=dictionary,
+                                                 passes=2,
                                                  eta=eta,
                                                  random_state=42,
                                                  per_word_topics=True,
@@ -105,24 +112,43 @@ def train_lda(docs, priors, dictionary, out, name):
     print(lda_model.print_topics())
 
 
+def train_lda_mallet(mallet_path, docs, dictionary, bigram_model, out, name):
+    filter_fn = helpers.preprocess_text_for_lda
+
+    print('converting corpus into bag of words')
+    bow_articles = list(iter(BoWIter(dictionary, docs, filter_fn, bigram=bigram_model)))
+    print('training lda')
+
+    model = models.wrappers.LdaMallet(mallet_path, corpus=bow_articles, num_topics=25, id2word=dictionary)
+    lda_model = models.wrappers.ldamallet.malletmodel2ldamodel(model)
+
+    lda_model.save(os.path.join(out, 'lda_model_{}.pkl'.format(name)))
+    print(lda_model.print_topics())
+
+
 def main():
     args = parser.parse_args()
     conn = db.NewsDb(args.db_path)
-
-    if args.type == 'dict' and args.dictionary is not None:
-        print('error, dictionary passed with type dict!')
-        return
 
     train = args.type
     n = conn.get_count_of_articles_for_year_and_month(args.year, 1)
     corpus = list(conn.select_articles_by_year_and_month(args.year, 1))
     assert (n == len(corpus))
     if train == 'dict':
+        assert(args.dictionary is None, "error, dictionary passed with type dict")
         build_phrase(corpus, args.output_path, '{}'.format(args.year))
     elif train == 'lda':
+        assert(args.dictionary is not None, "training lda but dictionary not passed")
+        assert(args.phraser is not None, "training lda but bigram model is not passed")
         priors = helpers.load_json(args.topics_prior)
         dct = corpora.Dictionary.load(args.dictionary)
-        train_lda(corpus, priors, dct, args.output_path, '{}'.format(args.year))
+        bigram_model = models.phrases.Phraser.load(args.phraser)
+        train_lda(corpus, priors, dct, bigram_model, args.output_path, '{}'.format(args.year))
+    elif train == "lda-mallet":
+        dct = corpora.Dictionary.load(args.dictionary)
+        bigram_model = models.phrases.Phraser.load(args.phraser)
+        mallet_path = args.mallet_path
+        train_lda_mallet(mallet_path, corpus, dct, bigram_model, args.out_put_path, '{}'.format(args.year))
 
 
 if __name__ == '__main__':

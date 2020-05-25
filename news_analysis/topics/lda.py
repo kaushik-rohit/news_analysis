@@ -29,26 +29,31 @@ parser.add_argument('-dict', '--dictionary',
                     required=True,
                     help='the path to bag of words model')
 
+parser.add_argument('-p', '--phraser-model',
+                    type=str,
+                    required=True,
+                    help='the path to bigram model')
+
 parser.add_argument('-l', '--lda-model',
                     type=str,
                     required=True,
                     help='the path to lda model that is to be used for topic labelling')
 
 
-def assign_topics_to_articles(articles, dictionary, lda_model):
+def assign_topics_to_articles(articles, dictionary, bigram_model, lda_model):
     filter_fn = helpers.preprocess_text_for_lda
     print('converting corpus into bag of words')
-    bow_articles = list(iter(BoWIter(dictionary, articles, filter_fn)))
+    bow_articles = list(iter(BoWIter(dictionary, articles, filter_fn, bigram_model)))
     print('fetching topics')
     topics = lda_model[bow_articles]
     print(topics[0], articles[0])
     return topics
 
 
-def topics_month_helper(db_path, dct, lda_model, year, month):
+def topics_month_helper(db_path, dct, bigram_model, lda_model, year, month):
     conn = db.NewsDb(db_path)
     articles = list(conn.select_articles_by_year_and_month(year, month))
-    assign_topics_to_articles(articles, dct, lda_model)
+    assign_topics_to_articles(articles, dct, bigram_model, lda_model)
     conn.close()
 
 
@@ -60,11 +65,12 @@ def main():
     args = parser.parse_args()
     dct = corpora.Dictionary.load(args.dictionary)
     lda_model = models.ldamulticore.LdaMulticore.load(args.lda_model)
+    bigram_model = Phraser.load(args.phraser_model)
     month = args.month
     year = args.year
     db_path = args.db_path
 
-    topics_month_helper(db_path, dct, lda_model, year, month)
+    topics_month_helper(db_path, dct, bigram_model, lda_model, year, month)
 
 
 if __name__ == '__main__':
