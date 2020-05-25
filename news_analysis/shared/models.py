@@ -47,33 +47,50 @@ class Topic:
 
 class CorpusIter(object):
 
-    def __init__(self, docs, preprocess_fn):
+    def __init__(self, docs, preprocess_fn=None, iterate_on='transcript'):
         self.docs = docs
         self.preprocess_fn = preprocess_fn
+        self.iterate_on = iterate_on
 
     def __iter__(self):
         for doc in self.docs:
             if self.preprocess_fn is None:
-                yield self.dict.doc2bow(doc)
+                if self.iterate_on == 'transcript':
+                    yield doc.transcript
+                elif self.iterate_on == 'program_name':
+                    yield doc.program_name
             else:
-                yield self.preprocess_fn(doc.transcript)
+                if self.iterate_on == 'transcript':
+                    yield self.preprocess_fn(doc.transcript)
+                elif self.iterate_on == 'program_name':
+                    yield self.preprocess_fn(doc.program_name)
 
 
 class BoWIter(object):
 
-    def __init__(self, dictionary, docs, preprocess_fn=None, bigram=None):
+    def __init__(self, dictionary, docs, preprocess_fn=None, bigram=None, iterate_on='transcript'):
         self.dict = dictionary
         self.docs = docs
         self.preprocess_fn = preprocess_fn
         self.bigram = bigram
+        self.iterate_on = iterate_on
 
     def __iter__(self):
         for doc in self.docs:
             if self.preprocess_fn is None:
-                bow = self.dict.doc2bow(doc)
+                if self.iterate_on == 'transcript':
+                    bow = self.dict.doc2bow(doc.transcript)
+                elif self.iterate_on == 'program_name':
+                    bow = self.dict.doc2bow(doc.program_name)
             elif self.bigram is None:
-                bow = self.dict.doc2bow(self.preprocess_fn(doc.transcript))
+                if self.iterate_on == 'transcript':
+                    bow = self.dict.doc2bow(self.preprocess_fn(doc.transcript))
+                elif self.iterate_on == 'program_name':
+                    bow = self.dict.doc2bow(self.preprocess_fn(doc.program_name))
             else:
-                bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.transcript)])
+                if self.iterate_on == 'transcript':
+                    bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.transcript)])
+                elif self.iterate_on == 'program_name':
+                    bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.program_name)])
 
             yield bow
