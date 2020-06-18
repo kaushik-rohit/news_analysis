@@ -40,6 +40,10 @@ parser.add_argument('-l', '--lda-model',
                     help='the path to lda model that is to be used for topic labelling')
 
 
+def predict():
+    pass
+
+
 def assign_topics_to_articles(articles, dictionary, bigram_model, lda_model):
     filter_fn = helpers.preprocess_text_for_lda
     print('converting corpus into bag of words')
