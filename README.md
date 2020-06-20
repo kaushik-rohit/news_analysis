@@ -25,7 +25,14 @@ News analysis project aims to study the biasness of articles and the effects of 
 ## 2. Topics
 We identify topics for each news articles based on correlation of bigrams between article transcript and 
 parliament speeches.
-## 4. Database
+
+### 2.1 LDA
+
+### 2.2 Doc2Vec
+
+### 2.3 XLNET
+
+## 3. Database
 We use sqlite3 for storing articles and topics data and perform fast query operations. Some indexes has to be
 introduced to speedup the read operation. The schema of database is presented below:
 
