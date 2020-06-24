@@ -4,7 +4,8 @@ data/
 *.db
 *.csv
 results/*
-
+news_analysis/topics/models/*
+news_analysis/topics/.ipynb_checkpoints/
 # Created by https://www.gitignore.io/api/python,pycharm+all
 # Edit at https://www.gitignore.io/?templates=python,pycharm+all
 

@@ -1,9 +1,11 @@
 tqdm
 parmap
-nltk
 python-dateutil
 scikit-learn
 numpy
 pandas
+nltk
 gensim
+scipy
+spacy
 matplotlib
