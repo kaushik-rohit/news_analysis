@@ -1,18 +1,18 @@
 import unittest
 import pandas as pd
-import helpers
+from shared import helpers
 import numpy as np
 
 
 class TestBiasCalculation(unittest.TestCase):
 
     def test_bigrams_share(self):
-        shares_all_articles = pd.read_csv('../tests/data/bigrams_share_all_articles_2015_1.csv')
-        shares_in_cluster = pd.read_csv('../tests/data/bigrams_share_in_cluster_2015_1.csv')
-        shares_not_in_cluster = pd.read_csv('../tests/data/bigrams_share_not_in_cluster_2015_1.csv')
-        bigrams_count_all_articles = helpers.load_json('../tests/data/total_bigrams_all_articles_2015_1.json')
-        bigrams_count_in_cluster = helpers.load_json('../tests/data/total_bigrams_in_cluster_2015_1.json')
-        bigrams_count_not_in_cluster = helpers.load_json('../tests/data/total_bigrams_not_in_cluster_2015_1.json')
+        shares_all_articles = pd.read_csv('../tests/data/bigrams_share_all_articles_2015.csv')
+        shares_in_cluster = pd.read_csv('../tests/data/bigrams_share_in_cluster_2015.csv')
+        shares_not_in_cluster = pd.read_csv('../tests/data/bigrams_share_not_in_cluster_2015.csv')
+        bigrams_count_all_articles = helpers.load_json('../tests/data/total_bigrams_all_articles_2015.json')
+        bigrams_count_in_cluster = helpers.load_json('../tests/data/total_bigrams_in_cluster_2015.json')
+        bigrams_count_not_in_cluster = helpers.load_json('../tests/data/total_bigrams_not_in_cluster_2015.json')
 
         bigrams = shares_all_articles.columns[2:]
 

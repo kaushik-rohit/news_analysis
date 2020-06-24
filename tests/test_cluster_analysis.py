@@ -1,5 +1,5 @@
 import unittest
-import cluster_analysis
+from clustering import cluster_analysis
 
 
 class FakeArticle:
