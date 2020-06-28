@@ -68,9 +68,9 @@ get_count_by_date_and_source_id_query = ("select source_id, count(*) as total_ar
                                          "where year=? and month=? and day=? group by source_id")
 
 update_article_topic = ("update articles "
-                        "set top1_topic=?, set top1_acc=?, "
-                        "set top2_topic=?, set top2_acc=?, "
-                        "set top3_topic=?, set top3_acc=? "
+                        "set top1_topic=?, top1_acc=?, "
+                        "top2_topic=?, top2_acc=?, "
+                        "top3_topic=?, top3_acc=? "
                         "where source_id=? and day=? and month=? and year=? and program_name=?")
 
 # select topics queries
@@ -200,9 +200,9 @@ class NewsDb:
         for i in range(n):
             article = articles[i]
             topic = topics[i]
-            params.append((topic[0][0], topic[0][1], topic[1][0], topic[1][1], topic[2][0], topic[2][1],
-                           article.source_id, article.date.day, article.date.month, article.date.year,
-                           article.program_name))
+            params.append((topic[0][0], round(topic[0][1]*100, 2), topic[1][0], round(topic[1][1]*100, 2),
+                           topic[2][0], round(topic[2][1]*100, 2), article.source_id,
+                           article.date.day, article.date.month, article.date.year, article.program_name))
         try:
             cur = self.conn.cursor()
             cur.executemany(update_article_topic, params)
@@ -263,7 +263,6 @@ class NewsDb:
         try:
             cur = self.conn.cursor()
             cur.execute(create_articles_table_query)
-            cur.execute(create_topics_table_query)
             self.conn.commit()
         except Error as e:
             print(e)
