@@ -175,6 +175,12 @@ def preprocess_text_for_lda(text):
     return preprocess_string(text, LDA_FILTERS)
 
 
+def preprocess_text_for_doc2vec(text):
+    FILTERS = [lambda x: x.lower(), strip_multiple_whitespaces, strip_tags, strip_punctuation,
+               strip_non_alphanum, strip_numeric, strip_short2]
+    return preprocess_string(text, FILTERS)
+
+
 def raw_topics_data_to_db(root, db_path='../articles.db'):
     topics = os.listdir(root)
     topics = [topic for topic in topics if (topic.endswith('csv') and not topic.startswith('00')

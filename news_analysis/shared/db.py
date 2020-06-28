@@ -14,6 +14,13 @@ create_articles_table_query = ("create table if not exists articles "
                                "year INTEGER, "
                                "program_name TEXT, "
                                "transcript TEXT, "
+                               "parliament INTEGER, "
+                               "top1_topic INTEGER, "
+                               "top1_acc REAL, "
+                               "top2_topic INTEGER, "
+                               "top2_acc REAL, "
+                               "top3_topic INTEGER, "
+                               "top3_acc REAL, "
                                "PRIMARY KEY (source_id, day, month, year, program_name));")
 
 create_topics_table_query = ("create table if not exists topics "
@@ -60,8 +67,11 @@ get_count_by_date_and_source_query = ("select source, count(*) as total_articles
 get_count_by_date_and_source_id_query = ("select source_id, count(*) as total_articles from articles "
                                          "where year=? and month=? and day=? group by source_id")
 
-update_article_topic = ("update articles set topic=? where source_id=? and day=? and month=? and year=? "
-                        "and program_name=?")
+update_article_topic = ("update articles "
+                        "set top1_topic=?, set top1_acc=?, "
+                        "set top2_topic=?, set top2_acc=?, "
+                        "set top3_topic=?, set top3_acc=? "
+                        "where source_id=? and day=? and month=? and year=? and program_name=?")
 
 # select topics queries
 select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where id=? "
@@ -190,7 +200,8 @@ class NewsDb:
         for i in range(n):
             article = articles[i]
             topic = topics[i]
-            params.append((topic, article.source_id, article.date.day, article.date.month, article.date.year,
+            params.append((topic[0][0], topic[0][1], topic[1][0], topic[1][1], topic[2][0], topic[2][1],
+                           article.source_id, article.date.day, article.date.month, article.date.year,
                            article.program_name))
         try:
             cur = self.conn.cursor()
@@ -269,4 +280,5 @@ class ResultIterator:
 
     def __iter__(self):
         for row in self.rows:
-            yield Article(row[0], row[1], date(row[4], row[3], row[2]), row[5], row[6], row[7])
+            yield Article(row[0], row[1], date(row[4], row[3], row[2]), row[5], row[6], row[7], row[8], row[9], row[10],
+                          row[11], row[12], row[13])

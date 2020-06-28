@@ -108,3 +108,5 @@ topics_index_to_name_map = {
     19: 'Transport',
     20: 'Others'
 }
+
+topics_name_to_index_map = {y: x for x, y in topics_index_to_name_map.items()}

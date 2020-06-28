@@ -1,13 +1,23 @@
+import parmap
+
+
 class Article:
 
-    def __init__(self, source_id, source, date, program_name, transcript, topic):
+    def __init__(self, source_id, source, date, program_name, transcript,
+                 parliament, topic1, acc1, topic2, acc2, topic3, acc3):
         self.source_id = source_id
         self.source = source
         self.date = date
         self.program_name = program_name
         self.transcript = transcript
         self.bigrams = None
-        self.topic = topic
+        self.parliament = parliament
+        self.top1_topic = topic1
+        self.top1_acc = acc1
+        self.top2_topic = topic2
+        self.top2_acc = acc2
+        self.top3_topic = topic3
+        self.top3_acc = acc3
 
     def __str__(self):
         return 'article id: {}, name: {}, date: {}, program_name: {}'.format(self.source_id, self.source, self.date,
@@ -65,6 +75,13 @@ class CorpusIter(object):
                 elif self.iterate_on == 'program_name':
                     yield self.preprocess_fn(doc.program_name)
 
+    def apply_fn(self, doc):
+        return self.bigram[self.preprocess_fn(doc.transcript)]
+
+    def get_corpus(self):
+        corpus = parmap.map(self.apply_fn, self.docs)
+        return corpus
+
 
 class BoWIter(object):
 
@@ -94,3 +111,10 @@ class BoWIter(object):
                     bow = self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.program_name)])
 
             yield bow
+
+    def apply_fn(self, doc):
+        return self.dict.doc2bow(self.bigram[self.preprocess_fn(doc.transcript)])
+
+    def get_bow_corpus(self):
+        bow_corpus = parmap.map(self.apply_fn, self.docs)
+        return bow_corpus
