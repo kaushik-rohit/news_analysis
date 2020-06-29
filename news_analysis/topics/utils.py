@@ -1,6 +1,8 @@
 import pandas as pd
 import os
 import ast
+import sqlite3
+from shared import helpers
 
 
 def get_category(topic, mapp):
@@ -10,10 +12,18 @@ def get_category(topic, mapp):
 
 def preprocess_speech_data(path, mapp):
     df = pd.read_csv(path, index_col=0)
-    df = df.drop(['speaker'], axis=1)
+    # df = df.drop(['speaker'], axis=1)
     df['topic'] = df.apply(lambda x: x['topic'].strip(), axis=1)
     df['topic'] = df.apply(lambda x: get_category(x['topic'], mapp), axis=1)
     df.to_csv(path, index=False)
+
+
+def group_speech_into_debates(path, mapp):
+    df = pd.read_csv(path, index_col=0)
+    df = df.drop(['date', 'speaker'], axis=1)
+    df = df.groupby(['topic'])['transcript'].apply(lambda x: ' '.join(x)).reset_index()
+    df.to_csv(path)
+    preprocess_speech_data(path, mapp)
 
 
 def sample_balanced_dataset(path):
@@ -61,3 +71,14 @@ def calculate_accuracy(preds):
     df = pd.DataFrame(rows, columns=['topic', 'top1-accuracy', 'top3-accuracy'])
     print(df)
     print('top1-accuracy: {}, top3-accuracy: {}'.format(correct_pred_top1/total, correct_pred_top3/total))
+
+
+def save_articles_to_csv(year):
+    conn = sqlite3.connect('../data/news.db')
+    sql = 'select * from articles where year={}'.format(year)
+    df = pd.read_sql(sql, conn)
+    print(df.head())
+    df['top1_topic'] = df.apply(lambda row: helpers.topics_index_to_name_map[row['top1_topic']], axis=1)
+    df['top2_topic'] = df.apply(lambda row: helpers.topics_index_to_name_map[row['top2_topic']], axis=1)
+    df['top3_topic'] = df.apply(lambda row: helpers.topics_index_to_name_map[row['top3_topic']], axis=1)
+    df.to_csv('news_{}_predictions.csv'.format(year))
