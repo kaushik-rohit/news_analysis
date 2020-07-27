@@ -1,8 +1,11 @@
+from shared import helpers, db
 import pandas as pd
-import os
-import ast
 import sqlite3
-from shared import helpers
+import parmap
+import nltk
+import ast
+import os
+import re
 
 
 def get_category(topic, mapp):
@@ -20,7 +23,7 @@ def preprocess_speech_data(path, mapp):
 
 def group_speech_into_debates(path, mapp):
     df = pd.read_csv(path, index_col=0)
-    df = df.drop(['date', 'speaker'], axis=1)
+    df = df.drop(['date'], axis=1)
     df = df.groupby(['topic'])['transcript'].apply(lambda x: ' '.join(x)).reset_index()
     df.to_csv(path)
     preprocess_speech_data(path, mapp)
@@ -82,3 +85,46 @@ def save_articles_to_csv(year):
     df['top2_topic'] = df.apply(lambda row: helpers.topics_index_to_name_map[row['top2_topic']], axis=1)
     df['top3_topic'] = df.apply(lambda row: helpers.topics_index_to_name_map[row['top3_topic']], axis=1)
     df.to_csv('news_{}_predictions.csv'.format(year))
+
+
+def is_political(article, political_bigrams):
+    transcript = article.transcript
+    stopW = nltk.corpus.stopwords.words('english')
+    ps = nltk.stem.PorterStemmer()
+
+    clean_transcript = transcript.lower()
+    clean_transcript = nltk.tokenize.word_tokenize(clean_transcript)
+    # Remove digits
+    clean_transcript = [i for i in clean_transcript if not re.match(r'\d+', i)]
+    # Remove Stopwords and single characters
+    clean_transcript = [i for i in clean_transcript if i not in stopW and len(i) > 1]
+    # Stemming
+    clean_transcript = [ps.stem(word) for word in clean_transcript]
+    clean_transcript = " ".join(clean_transcript)
+
+    bigrams = list(nltk.bigrams(clean_transcript.split()))
+    for bigram in bigrams:
+        bigr = bigram[0] + '.' + bigram[1]
+        if bigr in political_bigrams:
+            return 1
+
+    return 0
+
+
+def mark_political_news(year, month, db_path):
+    curr_path = os.path.dirname(os.path.join(os.path.abspath(__file__)))
+    POLITICAL_BIGRAMS = helpers.load_pickle(os.path.join(curr_path, 'data/political_bigrams.pkl'))
+    conn = db.NewsDb(db_path)
+    print('getting articles from the database...')
+    articles = list(conn.select_articles_by_year_and_month(year, month))
+    print('checking if article is political')
+    articles_polarity = parmap.map(is_political, articles, POLITICAL_BIGRAMS, pm_pbar=True)
+
+    print('updating it to database')
+    conn.update_parliament_for_articles(articles, articles_polarity)
+    conn.close()
+
+
+def mark_political_news_for_year(year, db_path):
+    for month in range(1, 13):
+        mark_political_news(year, month, db_path)
