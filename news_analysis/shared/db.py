@@ -46,6 +46,8 @@ select_articles_by_source_and_month_query = "select * from articles where year=?
 
 select_articles_by_date_query = "select * from articles where year=? and month=? and day=?"
 
+select_articles_between_date_query = "select * from articles where year=? and month=? and day between ? and ?"
+
 select_articles_by_source_and_date_query = "select * from articles where year=? and month=? and day=? and source=?"
 
 select_articles_by_diff_source_and_date_query = ("select * from articles "
@@ -72,6 +74,10 @@ update_article_topic = ("update articles "
                         "top2_topic=?, top2_acc=?, "
                         "top3_topic=?, top3_acc=? "
                         "where source_id=? and day=? and month=? and year=? and program_name=?")
+
+update_article_parliament = ("update articles "
+                             "set parliament=? "
+                             "where source_id=? and day=? and month=? and year=? and program_name=?")
 
 # select topics queries
 select_top_bigrams_for_topic = ("select bigram, sum(frequency) as freq from topics where id=? "
@@ -206,6 +212,23 @@ class NewsDb:
         try:
             cur = self.conn.cursor()
             cur.executemany(update_article_topic, params)
+            self.conn.commit()
+        except Error as e:
+            print(e)
+
+    def update_parliament_for_articles(self, articles, parliaments):
+        assert (len(articles) == len(parliaments))
+        n = len(articles)
+        params = []
+
+        for i in range(n):
+            article = articles[i]
+            political = parliaments[i]
+            params.append((political, article.source_id, article.date.day, article.date.month,
+                           article.date.year, article.program_name))
+        try:
+            cur = self.conn.cursor()
+            cur.executemany(update_article_parliament, params)
             self.conn.commit()
         except Error as e:
             print(e)
