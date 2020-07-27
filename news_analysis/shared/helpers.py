@@ -130,6 +130,12 @@ def load_json(name):
     return data
 
 
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+    return data
+
+
 def parse_date(date):
     date = date.split('\n')[0]
 
