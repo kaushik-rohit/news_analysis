@@ -1,11 +1,7 @@
-import numpy as np
+from shared import helpers
 import pandas as pd
-from nltk.stem import PorterStemmer
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-import shared
-import nltk
 import os
+import ast
 
 
 def count_of_bigram_shares_change(path):
@@ -66,3 +62,47 @@ def calculate_accuracy(preds):
     df = pd.DataFrame(rows, columns=['topic', 'top1-accuracy', 'top3-accuracy'])
     print(df)
     print('top1-accuracy: {}, top3-accuracy: {}'.format(correct_pred_top1/total, correct_pred_top3/total))
+
+
+def get_debate_counts_by_topic(path_to_data):
+    df = pd.read_csv(path_to_data)
+    df = df.drop(df[df.topic == 'admin'].index)
+    df = df.drop(df[df.transcript.str.split().map(len) < 10].index)
+    df['topic'] = df.apply(lambda row: helpers.preprocess(row['topic']), axis=1)
+    counts = df['topic'].value_counts()
+    topic_counts = {helpers.topics_index_to_name_map[key]: counts[key] for key in counts.keys()}
+    counts_df = pd.DataFrame.from_dict(topic_counts, orient='index', columns=['count'])
+    total = counts_df['count'].sum()
+    counts_df['fraction'] = counts_df.apply(lambda x: round(x['count'] / total * 100, 2), axis=1)
+    return counts_df
+
+
+def get_news_counts_by_topics_and_source(path_to_data):
+    news_pred = pd.read_csv(path_to_data)
+    sources = news_pred['source'].unique()
+    topics = helpers.topics_index_to_name_map.keys()
+
+    counts = {month: {source: {topic: 0 for topic in topics} for source in sources} for month in range(1, 13)}
+
+    for index, row in news_pred.iterrows():
+        month = row['month']
+        source = row['source']
+        topic = row['top1_topic']
+        counts[month][source][topic] += 1
+
+    rows = []
+
+    for month in range(1, 13):
+        for source in sources:
+            row = [month, source]
+            for topic in topics:
+                row.append(counts[month][source][topic])
+            rows.append(row)
+    columns = ['month', 'source'] + topics
+    df = pd.DataFrame(rows, columns=columns)
+    df = df.sort_values(by=['month', 'source'])
+    return df
+
+
+def get_bbc_articles_counts_by_topic_and_source(path_to_data):
+    pass
