@@ -4,3 +4,5 @@ for i in "${threshold[@]}";do
     python analysis_gensim.py -d ../articles.db -y 2014 -dict ../models/vocab_2014.dict -tf ../models/tfidf_2014 -t "$i"
     python analysis_gensim.py -d ../articles.db -y 2014 -m 1 -dict ../models/vocab_2014_1.dict -tf ../models/tfidf_2014_1 -t "$i"
 done
+
+python -m topics.classifier --doc2vec ./topics/models/doc2vec/doc2vec_12_13 -d ../data/news.db --classifier ./topics/models/doc2vec/classifier_12_13 - y 2014
