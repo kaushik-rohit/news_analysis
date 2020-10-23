@@ -3,7 +3,8 @@ import argparse
 from gensim import corpora, models
 from gensim.models import Doc2Vec
 from gensim.models.phrases import Phraser
-from shared import db, helpers, constants
+from shared import db, helpers
+from joblib import dump, load
 import topics.net as net
 from shared.models import BoWIter, CorpusIter
 import parmap
@@ -59,6 +60,11 @@ parser.add_argument('--classifier',
                     type=str,
                     required=True,
                     help='the path to tensorflow nn classifier')
+
+parser.add_argument('--encoder',
+                    type=str,
+                    required=False,
+                    help='path to encoder for y labels in classification model')
 
 
 class GenericClassifier:
@@ -144,7 +150,8 @@ def main():
         bigram_model = Phraser.load(args.phraser_model)
     elif name == 'doc2vec':
         doc2vec = Doc2Vec.load(args.doc2vec)
-        classifier = net.doc2vec_network()
+        encoder = load(args.encoder)
+        classifier = net.doc2vec_network(encoder)
         classifier.load_weights(args.classifier)
         if month is None:
             classify_articles_doc2vec_for_year(db_path, doc2vec, classifier, year)
