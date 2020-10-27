@@ -1,3 +1,6 @@
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
 from shared import helpers, db
 import pandas as pd
 import sqlite3
