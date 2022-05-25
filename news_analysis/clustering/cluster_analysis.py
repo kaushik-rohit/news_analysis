@@ -9,6 +9,7 @@ from gensim import models, corpora
 from gensim.similarities import MatrixSimilarity
 
 from shared import helpers, db
+from shared.models import BoWIter
 
 # create necessary arguments to run the analysis
 parser = argparse.ArgumentParser()
@@ -912,8 +913,10 @@ def aggregate_by_month(path, dct, tfidf_model, year, month, agg_later=False, thr
     stats = pool.starmap(get_stats_for_date, [(path, dct, tfidf_model, curr_date, threshold)
                                               for curr_date in date_range])
     pool.close()
-    stats = list(zip(*stats))
-    stats = pd.concat(stats[0])
+    # stats = list(zip(*stats))
+    # print(len(stats))
+    # print(stats[0])
+    stats = pd.concat(stats)
 
     # average the stats for month, to be used by function aggregate by year, which reports results averaged by month
     if agg_later:
