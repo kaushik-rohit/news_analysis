@@ -1,12 +1,11 @@
-import argparse
-
 from gensim import corpora, models
 from gensim.models import Doc2Vec
 from gensim.models.phrases import Phraser
-from shared import db, helpers
-from joblib import dump, load
-import topics.net as net
 from shared.models import BoWIter, CorpusIter
+from shared import db, helpers
+from joblib import load
+import topics.net as net
+import argparse
 import parmap
 import numpy as np
 

@@ -3,6 +3,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from shared import helpers, db
 import pandas as pd
+import numpy as np
 import sqlite3
 import parmap
 import nltk
@@ -16,19 +17,40 @@ def get_category(topic, mapp):
     return category['Category'].iloc[0]
 
 
-def preprocess_speech_data(path, mapp):
-    df = pd.read_csv(path, index_col=0)
+def preprocess_speech_data(df, path, name, mapp):
     # df = df.drop(['speaker'], axis=1)
-    df['topic'] = df.apply(lambda x: x['topic'].strip(), axis=1)
-    df['topic'] = df.apply(lambda x: get_category(x['topic'], mapp), axis=1)
-    df.to_csv(path, index=False)
+    df['title'] = df.apply(lambda x: x['title'].strip(), axis=1)
+    df['topic'] = df.apply(lambda x: get_category(x['title'], mapp), axis=1)
+    df.to_csv(os.path.join(path, name), index=False)
 
 
-def group_speech_into_debates(path, mapp):
-    df = pd.read_csv(path, index_col=0)
+def count_by_party(row, party):
+    row_party = row['Party']
+
+    if party == 'Others' and row_party not in ['Labour', 'Conservative']:
+        return len(row['Speech'].split())
+    if row['Party'] == party:
+        return len(row['Speech'].split())
+    return 0
+
+
+def group_speech_into_debates(path, name, mapp):
+    df = pd.read_csv(os.path.join(path, name), index_col=0)
     df = df.groupby(['date', 'topic'])['transcript'].apply(lambda x: ' '.join(x)).reset_index()
-    df.to_csv(path)
-    preprocess_speech_data(path, mapp)
+    preprocess_speech_data(df, path, name.replace('speech', 'debate'), mapp)
+
+
+def group_speech_into_debates_with_govt_count(path, name, mapp):
+    df = pd.read_csv(os.path.join(path, name))
+    df['Labour'] = df.apply(lambda x: count_by_party(x, 'Labour'), axis=1)
+    df['Conservative'] = df.apply(lambda x: count_by_party(x, 'Conservative'), axis=1)
+    df['Others'] = df.apply(lambda x: count_by_party(x, 'Others'), axis=1)
+    df = df.groupby(['Date', 'Topic'], as_index=False).agg({'Speech': lambda x: ' '.join(x),
+                                                            'Labour': 'sum',
+                                                            'Conservative': 'sum',
+                                                            'Others': 'sum'})
+    df.columns = ['date', 'title', 'transcript', 'labour', 'conservative', 'others']
+    preprocess_speech_data(df, path, name.replace('commons_with_govt', 'debate'), mapp)
 
 
 def save_articles_to_csv(year):
@@ -115,13 +137,12 @@ def get_keywords_occurance_position(path_to_csv):
     for index, row in df.iterrows():
         bigrams = get_bigrams(row['Transcript'])
         n_bigrams = len(bigrams)
-
         positions = {keyword: [] for keyword in keywords}
 
         for i, x in enumerate(bigrams):
-            for keyword in keywords:
-                if x == keyword:
-                    positions[keyword].append(i)
+            if x not in keywords:
+                continue
+            positions[x].append(i)
 
         for keyword in keywords:
             position_for_keyword = positions[keyword]
@@ -145,7 +166,7 @@ def assign_bigrams_to_topic(path):
 
     res_df = pd.DataFrame(si['bigrams'].values, columns=['bigram'])
     topics_df = pd.DataFrame(si['bigrams'].values, columns=['bigram'])
-    for topic in shared.topics_id:
+    for topic in helpers.topics_id:
         sit = pd.read_csv(os.path.join(path, 'sit_before{}.csv'.format(topic)))
         score = []
 
@@ -160,6 +181,6 @@ def assign_bigrams_to_topic(path):
 
     res_df.to_csv(os.path.join(path, 'bigram_sit_si_score.csv'))
     topics_df['topic'] = res_df[res_df.columns[1:]].idxmax(axis=1)
-    topics_df['topic'] = topics_df['topic'].apply(lambda x: shared.topics_id_to_name_map['02'] if x is np.nan else
-                                                  shared.topics_id_to_name_map[x])
+    topics_df['topic'] = topics_df['topic'].apply(lambda x: helpers.topics_id_to_name_map['02'] if x is np.nan else
+    helpers.topics_id_to_name_map[x])
     topics_df.to_csv(os.path.join(path, 'bigram_topics.csv'))
