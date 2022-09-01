@@ -36,7 +36,7 @@ def convert_affiliations_to_matrix(dataframe, aff_type, save_name):
         if dt not in matrix_form:
             matrix_form[dt] = {}
         if source_name not in matrix_form[dt]:
-            matrix_form[dt][source_name] = 0
+            matrix_form[dt][source_name] = np.nan
         matrix_form[dt][source_name] = row[aff_type]
     source_names = list(set(source_names))
     source_names.sort()
@@ -54,7 +54,7 @@ def convert_affiliations_to_matrix(dataframe, aff_type, save_name):
             if source in matrix_form[dt]:
                 row.append(matrix_form[dt][source])
             else:
-                row.append(0)
+                row.append(np.nan)
         rows.append(row)
     columns = ['date', 'year', 'month']
     columns.extend(source_names)
@@ -80,4 +80,16 @@ convert_affiliations_to_matrix(df, 'affiliation_conShare', 'affiliation_conShare
 convert_affiliations_to_matrix(df, 'affiliation_conShare_EN', 'affiliation_conShare_EN_std_after.csv')
 convert_affiliations_to_matrix(df, 'affiliation_conShare2', 'affiliation_conShare2_std_after.csv')
 convert_affiliations_to_matrix(df, 'affiliation_conShare2_EN', 'affiliation_conShare2_EN_std_after.csv')
+
+
+df = pd.read_csv('extended_affiliations_std_after.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party', 'extended_affiliation_party_std_after.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party lower', 'extended_affiliation_party_lower_std_after.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party upper', 'extended_affiliation_party_upper_std_after.csv')
+
+
+df = pd.read_csv('extended_affiliations_std_before.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party', 'extended_affiliation_party_std_before.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party lower', 'extended_affiliation_party_lower_std_before.csv')
+convert_affiliations_to_matrix(df, 'affiliation_party upper', 'extended_affiliation_party_upper_std_before.csv')
 

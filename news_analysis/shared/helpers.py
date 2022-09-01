@@ -240,7 +240,7 @@ def raw_data_to_db(root, db_path='../articles.db'):
                     # change source name to be consistent with it's id
                     df['Source'] = id_to_name_map[newspaper]
                     # drop rows where Transcript is empty string
-                    df = df[(df['Program Name'] != "") | (df['Transcript'] != "")]
+                    df = df[df['Transcript'] != ""]
 
                     if df.empty:
                         continue
